@@ -6,10 +6,10 @@
 // (OMARCHY, AURORA, HUD, GLASS and CRYSTAL always use the theme.) (scale: draw W x H logical px shrunk, for thumbnails)
 // Smooth styles are anti-aliased vector art (no pixel grid). The plain ones stay inside a 22 px band
 // on every edge (the plugin widens the scratchpad gap to 26); FOLIAGE, SACRED, KAWAII, CELESTIAL,
-// VAPORWAVE, SAKURA, DEEPSEA, STEAMPUNK, FROST, HALLOWEEN, COSMIC and MEGACITY also draw decoration over the window area (the frame window is click-through).
+// VAPORWAVE, SAKURA, DEEPSEA, STEAMPUNK, FROST, HALLOWEEN, COSMIC, MEGACITY and GILDED also draw decoration over the window area (the frame window is click-through).
 
 var PIXEL = ["CRYSTAL", "ROYAL", "WOOD", "DUNGEON"]
-var SMOOTH = ["OMARCHY", "CYBERPUNK", "AURORA", "HUD", "TERMINAL", "GLASS", "FOLIAGE", "SACRED", "KAWAII", "CELESTIAL", "VAPORWAVE", "SAKURA", "DEEPSEA", "STEAMPUNK", "FROST", "HALLOWEEN", "COSMIC", "MEGACITY"]
+var SMOOTH = ["OMARCHY", "CYBERPUNK", "AURORA", "HUD", "TERMINAL", "GLASS", "FOLIAGE", "SACRED", "KAWAII", "CELESTIAL", "VAPORWAVE", "SAKURA", "DEEPSEA", "STEAMPUNK", "FROST", "HALLOWEEN", "COSMIC", "MEGACITY", "GILDED", "STARGLASS", "CITYEDGE", "WALLFRAME", "PASTEUP"]
 var NAMES = SMOOTH.concat(PIXEL)
 var BAND = 22
 
@@ -2902,9 +2902,336 @@ function megacity(ctx, W, H, o) {
   }
 }
 
+// ---- GILDED: art nouveau gold, ornaments made with ComfyUI (assets/*.png) -----
+var _artAsked = {}
+function artUrl(ctx, o, name) {
+  const cv = ctx.canvas
+  if (!o.assets || !cv || !cv.isImageLoaded) return ""
+  const u = o.assets + name
+  if (cv.isImageLoaded(u)) return u
+  if (!_artAsked[u]) { _artAsked[u] = true; cv.loadImage(u) }
+  return ""
+}
+function gilded(ctx, W, H, o) {
+  const p = palette(o.colors), B = BAND
+  const K = o.follow
+    ? { ink: mix(p.dark, "#000000", 0.3), gold: mix(p.accent, "#ffffff", 0.3), deep: p.accent, tint: p.accent }
+    : { ink: "#0a0b18", gold: "#ecc977", deep: "#b3822f", tint: "" }
+  const S = 400
+  // 1) ornaments first: they are the only thing on the canvas, so a source-atop fill can tint them
+  const ca = artUrl(ctx, o, "corner_a.png"), cb = artUrl(ctx, o, "corner_b.png"), md = artUrl(ctx, o, "medallion.png")
+  if (ca) { ctx.drawImage(ca, 0, 0, S, S); ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(ca, 0, 0, S, S); ctx.restore() }
+  if (cb) {
+    ctx.save(); ctx.translate(0, H); ctx.scale(1, -1); ctx.drawImage(cb, 0, 0, S, S); ctx.restore()
+    ctx.save(); ctx.translate(W, H); ctx.scale(-1, -1); ctx.drawImage(cb, 0, 0, S, S); ctx.restore()
+  }
+  if (md) ctx.drawImage(md, W / 2 - 100, -55, 200, 200)
+  if (K.tint) {
+    ctx.globalCompositeOperation = "source-atop"
+    ctx.fillStyle = rgba(K.tint, 0.72); ctx.fillRect(0, 0, W, H)
+    ctx.globalCompositeOperation = "source-over"
+  }
+  if (md) {   // soft dark backing so the medallion reads over bright windows
+    ctx.globalCompositeOperation = "destination-over"
+    const g = ctx.createRadialGradient(W / 2, 40, 10, W / 2, 40, 100)
+    g.addColorStop(0, rgba(K.ink, 0.8)); g.addColorStop(0.8, rgba(K.ink, 0.6)); g.addColorStop(1, rgba(K.ink, 0))
+    ctx.fillStyle = g; ctx.fillRect(W / 2 - 100, 0, 200, 140)
+    ctx.globalCompositeOperation = "source-over"
+  }
+  // 2) the band, drawn over the ornaments so they grow out from under it
+  band(ctx, W, H, K.ink, 16, 7, false)
+  rrPath(ctx, 3.5, 3.5, W - 7, H - 7, 13)
+  ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.deep, 0.9); ctx.stroke()
+  const g2 = ctx.createLinearGradient(0, 0, W, H)
+  g2.addColorStop(0, K.gold); g2.addColorStop(0.5, K.deep); g2.addColorStop(1, K.gold)
+  rrPath(ctx, 18.5, 18.5, W - 37, H - 37, 5)
+  ctx.lineWidth = 2; ctx.strokeStyle = g2; ctx.stroke()
+  // a thin gold vine with diamonds along the middle of the band
+  const vine = function (x0, y0, x1, y1) {
+    const len = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / len, uy = (y1 - y0) / len
+    ctx.beginPath()
+    for (let t = 0; t <= len; t += 3) {
+      const a = Math.sin(t / 60 * Math.PI * 2) * 2.2
+      const x = x0 + ux * t - uy * a, y = y0 + uy * t + ux * a
+      if (t === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+    }
+    ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.5); ctx.stroke()
+    ctx.fillStyle = rgba(K.gold, 0.9)
+    for (let t = 15; t < len; t += 60) {
+      const x = x0 + ux * t - uy * 2.2, y = y0 + uy * t + ux * 2.2
+      ctx.beginPath(); ctx.moveTo(x, y - 3); ctx.lineTo(x + 2.4, y); ctx.lineTo(x, y + 3); ctx.lineTo(x - 2.4, y); ctx.closePath(); ctx.fill()
+    }
+  }
+  const m = B + 4
+  vine(S * 0.55, 11, W - S * 0.55, 11)
+  vine(S * 0.55, H - 11, W - S * 0.55, H - 11)
+  vine(11, S * 0.55, 11, H - S * 0.55)
+  vine(W - 11, S * 0.55, W - 11, H - S * 0.55)
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0 = W * 0.4 - tw / 2
+    ctx.fillStyle = K.ink; rrPath(ctx, x0 - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
+    rrPath(ctx, x0 - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.9); ctx.stroke()
+    ctx.fillStyle = K.gold; spaced(ctx, t, x0, H - 7.5, sp, "left")
+  }
+}
+
+// ---- STARGLASS: the wallpaper as frosted glass (assets/glass_ring.png) with sacred geometry and a row of
+// moon phases. Window overlap is kept small: quarter-mandalas of ~150 px in the corners that fade out. ----
+function starglass(ctx, W, H, o) {
+  const p = palette(o.colors), B = BAND
+  const K = o.follow
+    ? { ink: mix(p.dark, "#000000", 0.35), gold: mix(p.accent, "#ffffff", 0.25), hi: p.bright, cyan: p.cyan, amber: p.byellow, tint: p.accent }
+    : { ink: "#070a1a", gold: "#e9c877", hi: "#fff3c8", cyan: "#52d6ff", amber: "#ffb04c", tint: "" }
+
+  const img = artUrl(ctx, o, "glass_ring.png")
+  if (img) {
+    ctx.drawImage(img, 0, 0, W, H)
+    if (K.tint) {
+      ctx.globalCompositeOperation = "source-atop"
+      ctx.fillStyle = rgba(K.tint, 0.45); ctx.fillRect(0, 0, W, H)
+      ctx.globalCompositeOperation = "source-over"
+    }
+  } else band(ctx, W, H, K.ink, 14, 6, false)
+  // dark inner lip so the glass reads as a bezel
+  ctx.save(); bandClip(ctx, W, H, 14, 6)
+  rrPath(ctx, B - 2, B - 2, W - 2 * B + 4, H - 2 * B + 4, 7)
+  ctx.lineWidth = 4; ctx.strokeStyle = rgba(K.ink, 0.7); ctx.stroke()
+  ctx.restore()
+
+  // sacred geometry in the corners: quarter flower-of-life, gold and cyan alternating (small, fading)
+  const R = 150
+  const corners = [[0, 0, 1, 1, K.gold], [W, 0, -1, 1, K.cyan], [0, H, 1, -1, K.cyan], [W, H, -1, -1, K.gold]]
+  for (const c of corners) {
+    ctx.save(); ctx.translate(c[0], c[1]); ctx.scale(c[2], c[3])
+    glowDisc(ctx, 0, 0, R, c[4], 0.14)
+    mandala(ctx, R, { gold: c[4] }, 0)
+    ctx.restore()
+  }
+  // the glass band over the mandalas, so they grow out from under it
+  ctx.save(); bandClip(ctx, W, H, 14, 6)
+  if (img) ctx.drawImage(img, 0, 0, W, H); else band(ctx, W, H, K.ink, 14, 6, false)
+  ctx.restore()
+
+  // specular edges
+  rrPath(ctx, 1.5, 1.5, W - 3, H - 3, 13)
+  ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.85); ctx.stroke()
+  rrPath(ctx, B - 2.5, B - 2.5, W - 2 * B + 5, H - 2 * B + 5, 7)
+  glowStroke(ctx, K.cyan, 1.2, 6, rgba(K.cyan, 0.7))
+  rrPath(ctx, 5.5, 5.5, W - 11, H - 11, 10)
+  ctx.lineWidth = 0.7; ctx.strokeStyle = rgba(K.hi, 0.22); ctx.stroke()
+
+  // a chain of interlocking circles along each edge (vesica pattern), between the corner pieces
+  const r = 5.5, m = R * 0.8
+  ctx.beginPath()
+  for (let x = m; x < W - m; x += r * 1.5) { ctx.moveTo(x + r, 11); ctx.arc(x, 11, r, 0, Math.PI * 2); ctx.moveTo(x + r, H - 11); ctx.arc(x, H - 11, r, 0, Math.PI * 2) }
+  for (let y = m; y < H - m; y += r * 1.5) { ctx.moveTo(11 + r, y); ctx.arc(11, y, r, 0, Math.PI * 2); ctx.moveTo(W - 11 + r, y); ctx.arc(W - 11, y, r, 0, Math.PI * 2) }
+  ctx.lineWidth = 0.7; ctx.strokeStyle = rgba(K.gold, 0.4); ctx.stroke()
+
+  // moon phases on top, centred (inside the band)
+  const mr = 5, gap = 17, x0 = W / 2 - gap * 4
+  ctx.save(); bandClip(ctx, W, H, 14, 6)
+  rrPath(ctx, x0 - 16, 3, gap * 8 + 32, 16, 8); ctx.fillStyle = rgba(K.ink, 0.85); ctx.fill()
+  ctx.restore()
+  for (let i = 0; i < 9; i++) {
+    const lit = i < 5 ? i : 8 - i, cx = x0 + i * gap
+    ctx.save()
+    if (i > 4) { ctx.translate(2 * cx, 0); ctx.scale(-1, 1) }
+    moonPhase(ctx, cx, 11, mr, true, { dark2: "#101634", moon: K.hi }, lit * mr / 2)
+    ctx.restore()
+  }
+
+  // seed-of-life rosettes in the band corners
+  const rosette = (cx, cy) => {
+    ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fillStyle = K.ink; ctx.fill()
+    ctx.lineWidth = 1.1; ctx.strokeStyle = K.gold; ctx.stroke()
+    const s = 3.6
+    ctx.beginPath(); ctx.moveTo(cx + s, cy); ctx.arc(cx, cy, s, 0, Math.PI * 2)
+    for (let i = 0; i < 6; i++) { const x = cx + Math.cos(i * Math.PI / 3) * s, y = cy + Math.sin(i * Math.PI / 3) * s; ctx.moveTo(x + s, y); ctx.arc(x, y, s, 0, Math.PI * 2) }
+    ctx.lineWidth = 0.8; ctx.strokeStyle = K.hi; ctx.stroke()
+  }
+  rosette(11, 11); rosette(W - 11, 11); rosette(11, H - 11); rosette(W - 11, H - 11)
+  brightStar(ctx, 11, H / 2, 3, { star: K.hi })
+  brightStar(ctx, W - 11, H / 2, 3, { star: K.hi })
+
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(K.ink, 0.88); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.8); ctx.stroke()
+    ctx.fillStyle = K.hi; spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+
+// ---- CITYEDGE: the wallpaper's own outer edge (assets/wall_edge.png) as a thin band that fades into the window,
+// with a strip-light rim, a small girder with cables and hanging neon signs on top, low skyline blocks and a few
+// taxi lights at the bottom, and a faint colour haze per corner. Everything past the band stays under ~60 px,
+// so the windows are almost fully visible. ----
+function cityedge(ctx, W, H, o) {
+  const p = palette(o.colors), B = BAND
+  const K = o.follow
+    ? { ink: mix(p.dark, "#000000", 0.4), cable: mix(p.bg, "#000000", 0.2), cyan: p.cyan, amber: p.byellow, orange: p.orange, pink: p.magenta, blue: p.blue, green: p.green, tint: p.accent }
+    : { ink: "#05070e", cable: "#141b24", cyan: "#3ddcff", amber: "#ffb347", orange: "#ff7a3c", pink: "#ff5fa6", blue: "#4a6bff", green: "#6cf08a", tint: "" }
+
+  const img = artUrl(ctx, o, "wall_edge.png")
+  if (img) {
+    ctx.drawImage(img, 0, 0, W, H)
+    if (K.tint) {
+      ctx.globalCompositeOperation = "source-atop"
+      ctx.fillStyle = rgba(K.tint, 0.4); ctx.fillRect(0, 0, W, H)
+      ctx.globalCompositeOperation = "source-over"
+    }
+  } else band(ctx, W, H, mix(K.ink, K.cable, 0.5), 14, 6, false)
+
+  // faint colour haze in the corners (the wallpaper's billboard glow)
+  glowDisc(ctx, 0, 0, 150, K.orange, 0.13); glowDisc(ctx, W, 0, 170, K.blue, 0.16)
+  glowDisc(ctx, 0, H, 170, K.green, 0.13); glowDisc(ctx, W, H, 150, K.cyan, 0.12)
+
+  // low skyline blocks standing on the bottom band, lit windows
+  const rnd = seeded(11)
+  const skyline = (x0, x1, dir) => {
+    let x = x0
+    while ((x1 - x) * dir > 0) {
+      const w = rnd(20, 42), t = Math.abs(x - x0) / Math.abs(x1 - x0)
+      const h = Math.max(10, rnd(30, 72) * (1 - t * 0.8)), bx = dir > 0 ? x : x - w
+      ctx.fillStyle = rgba(K.ink, 0.74); ctx.fillRect(bx, H - B - h, w, h + 2)
+      ctx.fillStyle = rgba(K.cyan, 0.16); ctx.fillRect(bx, H - B - h, w, 1)
+      for (let wy = H - B - h + 5; wy < H - B - 3; wy += 7) for (let wx = bx + 3; wx < bx + w - 3; wx += 6)
+        if (rnd(0, 1) < 0.34) { ctx.fillStyle = rgba(rnd(0, 1) < 0.7 ? K.amber : K.cyan, 0.85 * (1 - t * 0.6)); ctx.fillRect(wx, wy, 3, 3.6) }
+      if (rnd(0, 1) < 0.25) {
+        ctx.strokeStyle = rgba(K.cyan, 0.3); ctx.lineWidth = 1
+        ctx.beginPath(); ctx.moveTo(bx + w / 2, H - B - h); ctx.lineTo(bx + w / 2, H - B - h - 9); ctx.stroke()
+        ctx.beginPath(); ctx.arc(bx + w / 2, H - B - h - 9, 1.5, 0, Math.PI * 2); ctx.fillStyle = rgba(K.pink, 0.9); ctx.fill()
+      }
+      x += (w + rnd(1, 4)) * dir
+    }
+  }
+  skyline(B + 6, 380, 1); skyline(W - B - 6, W - 380, -1)
+
+  // a small girder under the top band with a strip-light, cables and hanging neon signs
+  const gx0 = W * 0.30, gx1 = W * 0.70, gy = B
+  ctx.fillStyle = rgba(K.ink, 0.6); ctx.fillRect(gx0, gy, gx1 - gx0, 9)
+  ctx.strokeStyle = rgba(K.cyan, 0.22); ctx.lineWidth = 1; ctx.beginPath()
+  for (let x = gx0; x < gx1; x += 12) { ctx.moveTo(x, gy); ctx.lineTo(x + 6, gy + 9); ctx.lineTo(x + 12, gy) }
+  ctx.stroke()
+  ctx.fillStyle = rgba(K.ink, 0.6); ctx.fillRect(gx0, gy + 9, gx1 - gx0, 2)
+  const dr = seeded(5)
+  for (let x = gx0 + 6; x < gx1 - 20; x += dr(26, 70)) {
+    const len = dr(10, 34), col = dr(0, 1) < 0.6 ? K.cyan : K.pink
+    ctx.fillStyle = rgba(col, 0.85); ctx.fillRect(x, gy + 10, len, 1.6)
+    glowDisc(ctx, x + len / 2, gy + 11, len, col, 0.1)
+    x += len
+  }
+  const cab = (x0, x1, sag) => {
+    ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x0, B - 1); ctx.quadraticCurveTo((x0 + x1) / 2, B + sag * 2, x1, B - 1)
+    ctx.lineWidth = 1.8; ctx.strokeStyle = rgba(K.ink, 0.85); ctx.stroke()
+    ctx.lineWidth = 0.7; ctx.strokeStyle = rgba(K.cyan, 0.25); ctx.stroke()
+  }
+  cab(150, 420, 11); cab(380, 640, 9); cab(W - 640, W - 380, 9); cab(W - 420, W - 150, 11)
+  const sign = (x, len, col, seed) => {
+    ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.ink, 0.9)
+    ctx.beginPath(); ctx.moveTo(x + 4, B); ctx.lineTo(x + 4, B + 7); ctx.moveTo(x + 12, B); ctx.lineTo(x + 12, B + 7); ctx.stroke()
+    glowDisc(ctx, x + 8, B + 7 + len / 2, len * 0.9, col, 0.2)
+    rrPath(ctx, x, B + 7, 16, len, 2); ctx.fillStyle = rgba(K.ink, 0.92); ctx.fill()
+    rrPath(ctx, x + 1.2, B + 8.2, 13.6, len - 2.4, 1.5); ctx.lineWidth = 0.9; ctx.strokeStyle = rgba(col, 0.9); ctx.stroke()
+    glyphs(ctx, x + 1, B + 10, 14, len - 6, col, seed)
+  }
+  sign(W * 0.10, 40, K.pink, 3); sign(W * 0.19, 28, K.cyan, 8); sign(W * 0.27, 44, K.orange, 15); sign(W * 0.74, 46, K.cyan, 12); sign(W * 0.82, 30, K.pink, 21); sign(W * 0.91, 42, K.orange, 33)
+
+  // dark inner lip and a cyan strip-light rim, dashed like the lights on the wallpaper's skybridge
+  ctx.save(); bandClip(ctx, W, H, 14, 6)
+  rrPath(ctx, B - 2, B - 2, W - 2 * B + 4, H - 2 * B + 4, 7); ctx.lineWidth = 4; ctx.strokeStyle = rgba(K.ink, 0.75); ctx.stroke()
+  ctx.restore()
+  rrPath(ctx, B - 2.5, B - 2.5, W - 2 * B + 5, H - 2 * B + 5, 7)
+  glowStroke(ctx, K.cyan, 1, 5, rgba(K.cyan, 0.6))
+  const lr = seeded(23)
+  const dashes = (vert, fixed, len) => {
+    for (let t = 40; t < len - 40;) {
+      const l = lr(8, 38), c = lr(0, 1) < 0.78 ? "#e8fbff" : K.amber
+      ctx.fillStyle = rgba(c, 0.8)
+      if (vert) ctx.fillRect(fixed, t, 1.8, l); else ctx.fillRect(t, fixed, l, 1.8)
+      t += l + lr(10, 46)
+    }
+  }
+  dashes(false, B - 3.4, W); dashes(false, H - B + 1.6, W); dashes(true, B - 3.4, H); dashes(true, W - B + 1.6, H)
+
+  // a few taxi lights just above the bottom band
+  const taxi = (x, y) => {
+    glowDisc(ctx, x, y, 12, K.amber, 0.22)
+    rrPath(ctx, x - 5, y - 1.8, 10, 3.6, 1.8); ctx.fillStyle = rgba(K.amber, 0.95); ctx.fill()
+    ctx.fillStyle = rgba(K.pink, 0.95); ctx.fillRect(x - 6.5, y - 0.8, 2, 1.6)
+  }
+  taxi(W * 0.40, H - B - 20); taxi(W * 0.47, H - B - 34); taxi(W * 0.64, H - B - 26)
+
+  // rim lights on the side bands
+  const sideSign = (left, y, h, col) => {
+    const x = left ? B - 1 : W - B - 10
+    glowDisc(ctx, left ? B + 4 : W - B - 4, y + h / 2, h, col, 0.16)
+    rrPath(ctx, x, y, 11, h, 2); ctx.fillStyle = rgba(K.ink, 0.92); ctx.fill()
+    rrPath(ctx, x + 1.2, y + 1.2, 8.6, h - 2.4, 1.2); ctx.lineWidth = 0.9; ctx.strokeStyle = rgba(col, 0.9); ctx.stroke()
+  }
+  sideSign(false, H * 0.38, 54, K.pink); sideSign(false, H * 0.64, 38, K.cyan); sideSign(true, H * 0.28, 46, K.orange); sideSign(true, H * 0.7, 34, K.green)
+
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(K.ink, 0.9); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 4); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 3); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.cyan, 0.85); ctx.stroke()
+    ctx.fillStyle = mix(K.cyan, "#ffffff", 0.6); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+
+// ---- WALLFRAME: the band is a picture made by the ComfyUI graph `frame_from_wallpaper` (assets/wallframe_band.png):
+// the wallpaper restyled along its edge into a neon-lit steel truss. Code only places it and adds the title. ----
+function wallframe(ctx, W, H, o) {
+  const p = palette(o.colors), B = BAND
+  const K = o.follow ? { ink: mix(p.dark, "#000000", 0.4), cyan: p.cyan, tint: p.accent } : { ink: "#05070e", cyan: "#3ddcff", tint: "" }
+  const img = artUrl(ctx, o, "wallframe_band.png")
+  if (img) {
+    ctx.drawImage(img, 0, 0, W, H)
+    if (K.tint) {
+      ctx.globalCompositeOperation = "source-atop"
+      ctx.fillStyle = rgba(K.tint, 0.4); ctx.fillRect(0, 0, W, H)
+      ctx.globalCompositeOperation = "source-over"
+    }
+  } else band(ctx, W, H, mix(K.ink, K.cyan, 0.15), 14, 6, false)
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(K.ink, 0.9); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 4); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 3); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.cyan, 0.85); ctx.stroke()
+    ctx.fillStyle = mix(K.cyan, "#ffffff", 0.6); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+
+// ---- PASTEUP: a city paste-up wall around the window. The dark panel band comes from the ComfyUI graph `frame_object_bezel`
+// (assets/pasteup_band.png); the notes, tape and holo stickers are cut-outs from the graph `frame_prop` (assets/pasteup_props.png,
+// placed by tools/compose-props.py) and overlap only a little. Follow mode tints the band only. ----
+function pasteup(ctx, W, H, o) {
+  const p = palette(o.colors)
+  const K = o.follow ? { ink: mix(p.dark, "#000000", 0.4), line: p.accent, tint: p.accent } : { ink: "#080a12", line: "#ffb347", tint: "" }
+  const bandImg = artUrl(ctx, o, "pasteup_band.png"), props = artUrl(ctx, o, "pasteup_props.png")
+  if (bandImg) {
+    ctx.drawImage(bandImg, 0, 0, W, H)
+    if (K.tint) {
+      ctx.globalCompositeOperation = "source-atop"
+      ctx.fillStyle = rgba(K.tint, 0.25); ctx.fillRect(0, 0, W, H)
+      ctx.globalCompositeOperation = "source-over"
+    }
+  } else band(ctx, W, H, mix(K.ink, K.line, 0.15), 14, 6, false)
+  if (props) ctx.drawImage(props, 0, 0, W, H)
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(K.ink, 0.92); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 4); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 3); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.85); ctx.stroke()
+    ctx.fillStyle = mix(K.line, "#ffffff", 0.6); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+
 var PAINTERS = { OMARCHY: omarchy, CYBERPUNK: cyberpunk, AURORA: aurora, HUD: hud, TERMINAL: terminal, GLASS: glass,
   FOLIAGE: foliage, SACRED: sacred, KAWAII: kawaii, CELESTIAL: celestial, VAPORWAVE: vaporwave,
-  SAKURA: sakura, DEEPSEA: deepsea, STEAMPUNK: steampunk, FROST: frost, HALLOWEEN: halloween, COSMIC: cosmic, MEGACITY: megacity }
+  SAKURA: sakura, DEEPSEA: deepsea, STEAMPUNK: steampunk, FROST: frost, HALLOWEEN: halloween, COSMIC: cosmic, MEGACITY: megacity, GILDED: gilded, STARGLASS: starglass, CITYEDGE: cityedge, WALLFRAME: wallframe, PASTEUP: pasteup }
 
 function paint(ctx, W, H, o) {
   ctx.reset()

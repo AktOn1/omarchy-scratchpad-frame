@@ -1,6 +1,6 @@
 // Centered style list. Up/Down (or j/k) move, Enter picks, Esc closes, click picks.
-// The last rows: switches "Follow Omarchy theme colors" (F) and "Show title" (T), then the button "Create theme from wallpaper..." (W);
-// Enter/Space/click toggles the selected switch or presses the button.
+// The last rows: switches "Follow Omarchy theme colors" (F) and "Show title" (T);
+// Enter/Space/click toggles the selected switch.
 // Moving previews the style on the frame (only committed on pick).
 import QtQuick
 
@@ -19,10 +19,9 @@ Item {
   signal closed()
   signal followToggled()
   signal titleToggled()
-  signal themeFromWallpaper()
 
   // 36 px rows, squeezed when the list would not fit the screen
-  readonly property int rowH: Math.max(22, Math.min(36, Math.floor((height - 200) / (names.length + 3))))
+  readonly property int rowH: Math.max(22, Math.min(36, Math.floor((height - 200) / (names.length + 2))))
 
   function c(name, fallback) { return colors[name] || fallback }
 
@@ -30,7 +29,7 @@ Item {
   onNamesChanged: selected = Math.max(0, names.indexOf(current))
 
   function move(d) {
-    const n = names.length + 3
+    const n = names.length + 2
     selected = (selected + d + n) % n
   }
 
@@ -40,20 +39,17 @@ Item {
     case Qt.Key_Up: case Qt.Key_K: case Qt.Key_Backtab: move(-1); break
     case Qt.Key_Down: case Qt.Key_J: case Qt.Key_Tab: move(1); break
     case Qt.Key_Home: selected = 0; break
-    case Qt.Key_End: selected = names.length + 2; break
+    case Qt.Key_End: selected = names.length + 1; break
     case Qt.Key_F: pk.followToggled(); break
     case Qt.Key_T: pk.titleToggled(); break
-    case Qt.Key_W: pk.themeFromWallpaper(); break
     case Qt.Key_Space:
       if (selected === names.length) pk.followToggled()
       else if (selected === names.length + 1) pk.titleToggled()
-      else if (selected === names.length + 2) pk.themeFromWallpaper()
       else return
       break
     case Qt.Key_Return: case Qt.Key_Enter:
       if (selected === names.length) pk.followToggled()
       else if (selected === names.length + 1) pk.titleToggled()
-      else if (selected === names.length + 2) pk.themeFromWallpaper()
       else if (names.length) pk.picked(names[selected])
       break
     case Qt.Key_Escape: case Qt.Key_Q: pk.closed(); break
@@ -68,7 +64,7 @@ Item {
     id: box
     anchors.centerIn: parent
     width: 460
-    height: header.height + (pk.names.length + 3) * pk.rowH + 12 + footer.height + 70
+    height: header.height + (pk.names.length + 2) * pk.rowH + 12 + footer.height + 70
     radius: 12
     color: pk.c("background", "#101018")
     border.width: 2
@@ -201,34 +197,10 @@ Item {
       }
     }
 
-    Rectangle {
-      id: wallRow
-      x: 12; width: parent.width - 24; height: pk.rowH
-      y: titleRow.y + pk.rowH + 4
-      radius: 8
-      readonly property bool sel: pk.selected === pk.names.length + 2
-      color: sel ? pk.c("selection", "#252e56") : "transparent"
-      border.width: 1
-      border.color: sel ? pk.c("accent", "#7d82d9") : pk.c("muted", "#888888")
-
-      Text {
-        anchors.centerIn: parent
-        text: "+  Create theme from wallpaper…"
-        color: wallRow.sel ? pk.c("bright_foreground", "#ffffff") : pk.c("accent", "#7d82d9")
-        font.family: pk.font; font.pixelSize: 14; font.bold: true
-      }
-      MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        onPositionChanged: pk.selected = pk.names.length + 2
-        onClicked: pk.themeFromWallpaper()
-      }
-    }
-
     Text {
       id: footer
       x: 24; anchors.bottom: parent.bottom; anchors.bottomMargin: 16
-      text: "↑↓ move  Enter pick  F colors  T title  W theme  Esc close"
+      text: "↑↓ move  Enter pick  F colors  T title  Esc close"
       color: pk.c("muted", "#888888")
       font.family: pk.font; font.pixelSize: 12
     }

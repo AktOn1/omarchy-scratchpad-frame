@@ -46,11 +46,12 @@ Window {
     id: cv
     anchors.fill: parent
     renderStrategy: Canvas.Immediate
+    onImageLoaded: requestPaint()
     onPaint: {
       const ctx = getContext("2d")
       const t0 = Date.now()
       Painter.paint(ctx, width, height, { style: win.styles[win.idx], text: "SCRATCHPAD",
-        colors: win.colors, px: 3, font: "monospace", follow: win.follow })
+        colors: win.colors, px: 3, font: "monospace", follow: win.follow, assets: Qt.resolvedUrl("../assets/").toString() })
       console.log("paint " + win.styles[win.idx] + " " + (Date.now() - t0) + " ms")
     }
   }

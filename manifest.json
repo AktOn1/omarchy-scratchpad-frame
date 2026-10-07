@@ -5,7 +5,7 @@
   "version": "1.3.0",
   "author": "AktOn1",
   "license": "MIT",
-  "description": "A frame around the scratchpad (SUPER + S) that slides in and out with it. Eighteen smooth styles (Omarchy, Cyberpunk, Aurora, HUD, Terminal, Glass, Foliage, Sacred, Kawaii, Celestial, Vaporwave, Sakura, Deep Sea, Steampunk, Frost, Halloween, Cosmic, Megacity) plus four 16-bit pixel-art styles. Pick from a centered menu; optionally recolour every style from your Omarchy theme and hide the title.",
+  "description": "A frame around the scratchpad (SUPER + S) that slides in and out with it. Nineteen smooth styles (Omarchy, Cyberpunk, Aurora, HUD, Terminal, Glass, Foliage, Sacred, Kawaii, Celestial, Vaporwave, Sakura, Deep Sea, Steampunk, Frost, Halloween, Cosmic, Megacity, Gilded) plus four 16-bit pixel-art styles. Pick from a centered menu; optionally recolour every style from your Omarchy theme and hide the title.",
   "kinds": [
     "service"
   ],
