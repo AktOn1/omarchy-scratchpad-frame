@@ -29,9 +29,6 @@ Twenty-four styles. The smooth, anti-aliased vector ones:
 | **Cosmic** | pixel-art deep space (ported from the hyprzome "cosmic" life world): starfield band with dithered nebula and a stepped rim; round 16-bit planets (some with moons) float at different distances: small hazy far ones, big bright near ones cropped by the screen edge, spilling into the window (click-through) |
 | **Megacity** | made from the wallpaper `wallhaven-w533px` (a dark cyberpunk city): steel truss band with a cyan strip-light rim, a girder across the top with hanging neon signs and sagging cables, tilted billboards, lit apartment blocks with a hazy far layer on the bottom edge, a glowing skybridge, flying taxis and a haze beam (click-through overlap) |
 | **Gilded** | art nouveau gold: ornate gold vines, lilies and irises grow out of all four corners, a rosette medallion hangs from the top edge, a thin gold vine runs along an ink band (click-through overlap). The ornaments are pictures made with a local image generator (`assets/`, see below); follow mode tints them with your theme accent |
-| **Starglass** | the wallpaper `wallhaven-w533px` blurred into frosted glass for the band (`assets/glass_ring.png`, so the glass shows the wallpaper's cyan, blue and amber lights), a gold hairline and cyan inner glow, a chain of interlocking circles along the edges, nine moon phases at the top centre, seed-of-life rosettes in the corners and a small flower-of-life quarter mandala (150 px, gold and cyan, fading out) in each corner. The window area stays clear (click-through overlap kept small). Follow mode tints the glass and lines with the theme |
-| **Cityedge** | the wallpaper `wallhaven-w533px` itself as the band: its real outer edge (`assets/wall_edge.png`) fades 38 px into the window, so the frame looks like the wallpaper continuing behind it. Cyan strip-light rim, a small girder with hanging neon signs and cables on top (under 70 px), low skyline blocks with lit windows in the bottom corners, three taxi lights and small rim signs on the sides. Everything inside the window area stays under about 70 px (click-through). Follow mode tints the band and the neon with the theme |
-| **Wallframe** | the band is a picture (`assets/wallframe_band.png`): the wallpaper restyled along its edge into a neon-lit steel truss, thin solid band that fades into the window. No hand-drawn decoration over the window. Follow mode tints it with the theme |
 | **Pasteup** | a city paste-up wall: a dark steel panel band (`assets/pasteup_band.png`) with orange status lamps, and small cut-out objects that overlap only a little into the window: masking tape, pink and yellow sticky notes, holographic stickers (`assets/pasteup_props.png`, placed by `tools/compose-props.py`). Follow mode tints the band only |
 
 And the 16-bit pixel-art ones: **Crystal**, **Royal**, **Wood** and **Dungeon**.
@@ -63,10 +60,6 @@ The switch is saved in `~/.local/state/scratchpad-frame/title`.
 A style can draw PNG pictures instead of (or on top of) vector shapes: **Gilded** does. The pictures live in `assets/`, the shell passes the folder to the painter as `o.assets`, and the style loads them with `artUrl(ctx, o, "name.png")` (see `gilded()` in `FramePainter.js`). Draw pictures first, then optionally tint them with a `source-atop` fill (that is how follow mode recolours Gilded), then draw the band over them.
 
 The Gilded pictures are original artwork (gold ornaments generated with a local image model, cut out and faded to the corners); they are mirrored in code for the other corners.
-
-
-The Starglass glass band is made from a wallpaper with `tools/make-glass-ring.py WALLPAPER assets/glass_ring.png` (numpy + Pillow, no AI model: blur, saturate, lift, frost grain, fade-out glow). Run it again with another wallpaper to get a matching glass band.
-The Cityedge band is made with `tools/make-wall-edge.py WALLPAPER assets/wall_edge.png` (numpy + Pillow: the wallpaper's own edge, lifted and soft-clipped, fading out inward). Run it again with another wallpaper to get a matching band; the neon colours in `cityedge()` follow the wallpaper's palette.
 
 ## Install
 
