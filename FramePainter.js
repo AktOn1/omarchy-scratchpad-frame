@@ -1,17 +1,25 @@
 .pragma library
 
 // Frame painters for the Scratchpad Frame plugin.
-// paint(ctx, W, H, o): o = { style, text, colors, px, font, follow, scale? }  (empty text = no label)
+// paint(ctx, W, H, o): o = { style, text, colors, px, font, follow, scale?, bleed? }  (empty text = no label; bleed: see OUTER below)
 // follow: true = recolour every style from the Omarchy theme; false = the style's own palette.
 // (OMARCHY, AURORA, HUD, GLASS and CRYSTAL always use the theme.) (scale: draw W x H logical px shrunk, for thumbnails)
 // Smooth styles are anti-aliased vector art (no pixel grid). The plain ones stay inside a 22 px band
 // on every edge (the plugin widens the scratchpad gap to 26); FOLIAGE, SACRED, KAWAII, CELESTIAL,
-// VAPORWAVE, SAKURA, DEEPSEA, STEAMPUNK, FROST, HALLOWEEN, COSMIC, MEGACITY and GILDED also draw decoration over the window area (the frame window is click-through).
+// VAPORWAVE, SAKURA, DEEPSEA, STEAMPUNK, FROST, HALLOWEEN, COSMIC, MEGACITY, GILDED, RUNEFORGE, NEXUS, EMBERGOTH, ABYSS, HANAMI and WILDWOOD also draw decoration over the window area (the frame window is click-through).
 
 var PIXEL = ["CRYSTAL", "ROYAL", "WOOD", "DUNGEON"]
-var SMOOTH = ["OMARCHY", "CYBERPUNK", "AURORA", "HUD", "TERMINAL", "GLASS", "FOLIAGE", "SACRED", "KAWAII", "CELESTIAL", "VAPORWAVE", "SAKURA", "DEEPSEA", "STEAMPUNK", "FROST", "HALLOWEEN", "COSMIC", "MEGACITY", "GILDED", "PASTEUP"]
-var NAMES = SMOOTH.concat(PIXEL)
+// SMOOTH and NAMES are built from PAINTERS (below): a style that has a PAINTERS entry is in the picker, nothing else to register.
+var SMOOTH = []
+var NAMES = []
 var BAND = 22
+// Outer contour: a fitted frame (around a small window) may paint BLEED px outside the W x H rectangle
+// so it is not just a box. Only the styles in OUTER do; the plugin grows the canvas by bleedFor(style)
+// on every side, and paint() hands the style o.bleed with the origin still at the rectangle's corner,
+// so the style draws at negative x/y and past W/H. o.bleed is 0 when the frame fills the screen.
+var BLEED = 28
+var OUTER = { CORALREEF: true, FROST: true, SAKURA: true, COSMIC: true, OMARCHY: true, CYBERPUNK: true, BLUEPRINT: true, DEEPSEA: true }
+function bleedFor(style) { return OUTER[style] ? BLEED : 0 }
 
 // ---- colour helpers --------------------------------------------------------
 function rgb(h) {
@@ -204,6 +212,22 @@ function arcRect(ctx, x, y, w, h, r, ccw) {
 // ---- OMARCHY: theme-driven, clean -----------------------------------------
 function omarchy(ctx, W, H, o) {
   const p = palette(o.colors)
+  const B = o.bleed || 0
+  if (B) {
+    // outer contour: round ears on the corners and a tab on each edge, painted before the band covers their roots
+    const ear = Math.min(B * 0.7, 18), tab = B * 0.6
+    ctx.fillStyle = p.dark; ctx.strokeStyle = rgba(p.accent, 0.7); ctx.lineWidth = 1.5
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath(); ctx.arc(i % 2 ? W : 0, i < 2 ? 0 : H, ear, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+    }
+    const tabs = [[W / 2, 0, 0], [W / 2, H, 0], [0, H / 2, 1], [W, H / 2, 1]]
+    for (let i = 0; i < 4; i++) {
+      const t = tabs[i], len = Math.min(90, (t[2] ? H : W) * 0.3), sgn = (i === 0 || i === 2) ? -1 : 1
+      ctx.save(); ctx.translate(t[0], t[1]); if (t[2]) ctx.rotate(Math.PI / 2)
+      rrPath(ctx, -len / 2, sgn < 0 ? -tab : -8, len, tab + 8, tab * 0.45)
+      ctx.fill(); ctx.stroke(); ctx.restore()
+    }
+  }
   band(ctx, W, H, p.dark, 16, 7, false)
   // hairline on the very edge, accent line hugging the windows
   rrPath(ctx, 1.5, 1.5, W - 3, H - 3, 15)
@@ -237,6 +261,19 @@ function cyberpunk(ctx, W, H, o) {
   if (o.follow) {
     dark = p.dark; cy = vivid(p.accent); yl = vivid(p.byellow)
     mg = vivid(hueDist(p.magenta, cy) > 0.08 ? p.magenta : p.red)
+  }
+  const B = o.bleed || 0
+  if (B) {
+    // outer contour: a chamfered neon bracket round each corner, painted before the band covers its roots
+    const k = 14, a = B - 6, L = 56
+    ctx.fillStyle = dark; ctx.lineWidth = 1.5
+    for (let i = 0; i < 4; i++) {
+      ctx.save(); ctx.translate(i % 2 ? W : 0, i < 2 ? 0 : H); ctx.scale(i % 2 ? -1 : 1, i < 2 ? 1 : -1)
+      ctx.beginPath()
+      ctx.moveTo(-a, L); ctx.lineTo(-a, -a + k); ctx.lineTo(-a + k, -a); ctx.lineTo(L, -a)
+      ctx.lineTo(L, 4); ctx.lineTo(4, 4); ctx.lineTo(4, L); ctx.closePath()
+      ctx.fill(); glowStroke(ctx, (i % 2) ? mg : cy, 1.5, 8); ctx.restore()
+    }
   }
   band(ctx, W, H, dark, 18, 8, true)
 
@@ -1503,128 +1540,6 @@ function seeded(seed) {
   return function (a, b) { s = (s * 1664525 + 1013904223) % 4294967296; return a + (b - a) * (s / 4294967296) }
 }
 
-// ---- SAKURA: spring blossom. Lacquer band with a wave pattern, plus blossom branches that reach from the
-// top corners into the window area, paper lanterns, falling petals and a pink wash (click-through). ----
-function blossom(ctx, x, y, r, rot, K) {
-  ctx.save(); ctx.translate(x, y); ctx.rotate(rot)
-  for (let i = 0; i < 5; i++) {
-    ctx.save(); ctx.rotate(i * 2 * Math.PI / 5)
-    ctx.beginPath(); ctx.moveTo(0, 0)
-    ctx.bezierCurveTo(-r * 0.8, -r * 0.3, -r * 0.62, -r * 1.05, -r * 0.14, -r * 1.0)
-    ctx.lineTo(0, -r * 0.8); ctx.lineTo(r * 0.14, -r * 1.0)
-    ctx.bezierCurveTo(r * 0.62, -r * 1.05, r * 0.8, -r * 0.3, 0, 0)
-    const g = ctx.createLinearGradient(0, 0, 0, -r)
-    g.addColorStop(0, K.petalDeep); g.addColorStop(0.5, K.petal); g.addColorStop(1, K.petalLight)
-    ctx.fillStyle = g; ctx.fill()
-    ctx.restore()
-  }
-  dotShape(ctx, 0, 0, r * 0.2, K.petalDeep)
-  ctx.lineWidth = Math.max(0.5, r * 0.07); ctx.strokeStyle = K.gold
-  for (let i = 0; i < 6; i++) {
-    const a = i * Math.PI / 3 + 0.3
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5); ctx.stroke()
-    dotShape(ctx, Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5, r * 0.07, K.gold)
-  }
-  ctx.restore()
-}
-function twig(ctx, rnd, x, y, ang, len, w, depth, K, out) {
-  const n = Math.max(3, Math.round(len / 12)), seg = len / n
-  let px = x, py = y, a = ang
-  ctx.lineCap = "round"; ctx.strokeStyle = K.bark
-  for (let i = 0; i < n; i++) {
-    a += rnd(-0.14, 0.14)
-    const nx = px + Math.cos(a) * seg, ny = py + Math.sin(a) * seg
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(nx, ny)
-    ctx.lineWidth = Math.max(1, w * (1 - i / n * 0.55)); ctx.strokeStyle = K.bark; ctx.stroke()
-    if (depth < 3 && i > 0 && i % 2 === 0 && rnd(0, 1) < 0.75)
-      twig(ctx, rnd, nx, ny, a + (rnd(0, 1) < 0.5 ? -1 : 1) * rnd(0.5, 0.95), len * rnd(0.4, 0.6), w * 0.62, depth + 1, K, out)
-    if (depth >= 1 && rnd(0, 1) < 0.6) out.push([nx, ny, rnd(6, 10)])
-    px = nx; py = ny
-  }
-  out.push([px, py, rnd(7, 11)])
-}
-function lantern(ctx, x, y, s, K) {
-  const rw = 13 * s, rh = 17 * s
-  ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, y - rh - 3 * s)
-  ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.dark, 0.9); ctx.stroke()
-  glowDisc(ctx, x, y, 60 * s, K.glow, 0.3)
-  const g = ctx.createLinearGradient(x - rw, 0, x + rw, 0)
-  g.addColorStop(0, K.redDeep); g.addColorStop(0.45, K.red); g.addColorStop(1, K.redDeep)
-  ctx.beginPath(); ctx.ellipse(x, y, rw, rh, 0, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill()
-  ctx.lineWidth = 0.8; ctx.strokeStyle = rgba(K.dark, 0.55)
-  for (const k of [-0.66, -0.33, 0, 0.33, 0.66]) { ctx.beginPath(); ctx.ellipse(x, y, rw * Math.abs(k) || 0.5, rh, 0, 0, Math.PI * 2); ctx.stroke() }
-  for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(x - rw * 0.93, y + i * rh * 0.25); ctx.quadraticCurveTo(x, y + i * rh * 0.25 + 2 * s, x + rw * 0.93, y + i * rh * 0.25); ctx.stroke() }
-  ctx.fillStyle = K.dark
-  ctx.fillRect(x - rw * 0.55, y - rh - 3 * s, rw * 1.1, 4 * s); ctx.fillRect(x - rw * 0.55, y + rh - s, rw * 1.1, 4 * s)
-  ctx.beginPath(); ctx.moveTo(x, y + rh + 3 * s); ctx.lineTo(x, y + rh + 14 * s); ctx.lineWidth = 1.4; ctx.strokeStyle = K.gold; ctx.stroke()
-  dotShape(ctx, x, y + rh + 15 * s, 2 * s, K.gold)
-}
-function sakura(ctx, W, H, o) {
-  const p = palette(o.colors)
-  const K = o.follow
-    ? { dark: p.dark, lacq: mix(p.dark, p.red, 0.18), wave: mix(p.red, p.bright, 0.25), gold: p.byellow, bark: mix(p.dark, p.orange, 0.3),
-        petal: mix(p.magenta, p.bright, 0.45), petalLight: mix(p.magenta, p.bright, 0.8), petalDeep: p.magenta, red: p.red, redDeep: darker(p.red, 1.7),
-        glow: p.magenta, ink: p.dark }
-    : { dark: "#1c0f16", lacq: "#341624", wave: "#e8a0b4", gold: "#f0cc7a", bark: "#4a2c26",
-        petal: "#f7b6c8", petalLight: "#fde4ec", petalDeep: "#e0668a", red: "#d03a46", redDeep: "#8e1f2e", glow: "#ffb0a0", ink: "#1c0f16" }
-
-  glowDisc(ctx, 0, 0, 330, K.petal, 0.3); glowDisc(ctx, W, 0, 320, K.petal, 0.26); glowDisc(ctx, W, H, 240, K.petal, 0.18)
-
-  const g = ctx.createLinearGradient(0, 0, W, 0)
-  g.addColorStop(0, K.lacq); g.addColorStop(0.5, mix(K.lacq, K.dark, 0.5)); g.addColorStop(1, K.lacq)
-  band(ctx, W, H, g, 16, 7, false)
-
-  ctx.save(); bandClip(ctx, W, H, 16, 7)
-  ctx.lineWidth = 0.8
-  for (let row = 0, y = -2; y < H + 6; row++, y += 5.5)
-    for (let x = (row % 2) * 11 - 22; x < W + 22; x += 22) {
-      if (x > BAND + 14 && x < W - BAND - 14 && y > BAND + 14 && y < H - BAND - 14) continue
-      ctx.strokeStyle = rgba(K.wave, 0.34)
-      for (const r of [10.5, 7.5, 4.5]) { ctx.beginPath(); ctx.arc(x, y + 11, r, Math.PI, 0); ctx.stroke() }
-    }
-  ctx.restore()
-
-  rrPath(ctx, 15.5, 15.5, W - 31, H - 31, 8)
-  glowStroke(ctx, rgba(K.gold, 0.9), 1.2, 6, rgba(K.gold, 0.7))
-  rrPath(ctx, 1.5, 1.5, W - 3, H - 3, 15)
-  ctx.lineWidth = 1.2; ctx.strokeStyle = rgba(K.red, 0.85); ctx.stroke()
-
-  // lanterns hang from the top band
-  lantern(ctx, W * 0.31, 82, 1.0, K); lantern(ctx, W * 0.31 + 44, 60, 0.75, K)
-  lantern(ctx, W * 0.66, 70, 1.0, K); lantern(ctx, W * 0.66 - 40, 98, 0.8, K)
-
-  // blossom branches from the corners
-  const blooms = []
-  twig(ctx, seeded(11), -12, 34, 0.33, 360, 9, 0, K, blooms)
-  twig(ctx, seeded(23), W + 12, 52, Math.PI - 0.3, 330, 8.5, 0, K, blooms)
-  twig(ctx, seeded(37), W + 10, H - 90, Math.PI + 0.55, 220, 6.5, 0, K, blooms)
-  twig(ctx, seeded(41), -10, H - 60, -0.5, 190, 6, 0, K, blooms)
-  const rb = seeded(5)
-  blooms.forEach((b) => { blossom(ctx, b[0], b[1], b[2], rb(0, 6.28), K) })
-  // buds
-  for (let i = 0; i < blooms.length; i += 3) dotShape(ctx, blooms[i][0] + rb(-9, 9), blooms[i][1] + rb(-9, 9), 2.4, K.petalDeep)
-
-  // falling petals drifting from the branches
-  const rp = seeded(77)
-  for (let i = 0; i < 70; i++) {
-    const side = i % 2, x = side ? W - rp(30, 420) * rp(0.4, 1) : rp(30, 420) * rp(0.4, 1)
-    const y = 30 + rp(0, 1) * rp(0, 1) * (H - 80)
-    leafShape(ctx, x, y, rp(0, 6.28), rp(6, 11), rp(2.2, 3.6), rgba(i % 3 ? K.petal : K.petalLight, 0.9), null)
-  }
-  // a scatter along the bottom edge
-  for (let x = 40; x < W - 40; x += 26)
-    if (hash(x, 4) > 0.45) leafShape(ctx, x + hash(x, 8) * 20, H - 8 - hash(x, 2) * 22, hash(x, 9) * 6.28, 8, 2.8, rgba(K.petal, 0.95), null)
-
-  if (o.text) {
-    setFont(ctx, o, 10, true)
-    const t = o.text, sp = 3.5, tw = spacedWidth(ctx, t, sp), x0 = 40
-    pill(ctx, x0 - 4, 3, tw + 40, 17, K.dark, K.petal, 1)
-    blossom(ctx, x0 + 9, 11.5, 5.2, 0.3, K)
-    ctx.fillStyle = K.petalLight
-    spaced(ctx, t, x0 + 22, 15, sp, "left")
-  }
-}
-
 // ---- DEEPSEA: underwater. Wave-lined water band, plus light rays, swaying kelp, corals, a jellyfish,
 // a school of fish and rising bubbles that reach into the window area (click-through). ----
 function fishShape(ctx, x, y, s, dir, body, fin) {
@@ -1684,6 +1599,11 @@ function deepsea(ctx, W, H, o) {
     : { deep: "#04162a", mid: "#0b4268", wave: "#58d6e0", ray: "#8fe8ff", kelp: "#1d7a58", kelpLight: "#58c28a",
         coral1: "#ff7a6b", coral2: "#ff9fc0", coral3: "#ffb04a", jelly: "#d58cff", fish1: "#ffa23a", fish2: "#ffd84a", fin: "#e8543c", sand: "#8a7a52", bub: "#d8f6ff" }
 
+  // a frame fitted to a small window (bleed > 0) gets a thinner overlap and an outer contour; full screen is unchanged
+  const B = o.bleed || 0
+  const k = B ? Math.max(0.5, Math.min(1, Math.min(W, H * 1.6) / 1400)) : 1
+  ctx.save()
+  if (B) { ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip() }
   // light rays from the surface
   for (let i = 0; i < 9; i++) {
     const x = W * (0.05 + i * 0.115) + hash(i, 3) * 40, w = 40 + hash(i, 5) * 60, L = 380 + hash(i, 8) * 260
@@ -1693,6 +1613,47 @@ function deepsea(ctx, W, H, o) {
     ctx.fillStyle = g; ctx.fill()
   }
   glowDisc(ctx, W / 2, 0, 520, K.ray, 0.12); glowDisc(ctx, W * 0.15, H, 260, K.deep, 0.5); glowDisc(ctx, W * 0.85, H, 260, K.deep, 0.5)
+  ctx.restore()
+
+  if (B) {
+    // outer contour, painted before the band covers its roots: a wave crest on top, bubble clusters on the
+    // corners, kelp blades on both sides and a sand bank with a starfish below
+    const ro = seeded(41)
+    ctx.beginPath(); ctx.moveTo(0, 6)
+    for (let x = 0; x <= W; x += 6) ctx.lineTo(x, -(11 + Math.sin(x * 0.06) * 4 + Math.sin(x * 0.17 + 1) * 2))
+    ctx.lineTo(W, 6); ctx.closePath()
+    ctx.fillStyle = rgba(K.mid, 0.95); ctx.fill()
+    ctx.beginPath()
+    for (let x = 0; x <= W; x += 6) { const y = -(11 + Math.sin(x * 0.06) * 4 + Math.sin(x * 0.17 + 1) * 2); if (x) ctx.lineTo(x, y); else ctx.moveTo(x, y) }
+    ctx.lineWidth = 1.4; ctx.strokeStyle = rgba(K.wave, 0.85); ctx.stroke()
+    for (let i = 0; i < 9; i++) {
+      const x = ro(20, W - 20), r = ro(1.2, 2.6), y = -(B - 5 - ro(0, 6))
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 0.9; ctx.strokeStyle = rgba(K.bub, 0.7); ctx.stroke()
+    }
+    ctx.beginPath(); ctx.moveTo(0, H - 6)
+    for (let x = 0; x <= W; x += 8) ctx.lineTo(x, H + 8 + Math.sin(x * 0.03) * 4 + hash(x, 9) * 4)
+    ctx.lineTo(W, H - 6); ctx.closePath()
+    ctx.fillStyle = rgba(K.sand, 0.95); ctx.fill()
+    for (let i = 0; i < 7; i++) dotShape(ctx, ro(30, W - 30), H + 10 + ro(0, 8), ro(1.2, 2.4), rgba(K.bub, 0.35))
+    ctx.beginPath()
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 3.5 : 9, qx = W * 0.62 + Math.cos(a) * rr, qy = H + 14 + Math.sin(a) * rr; i ? ctx.lineTo(qx, qy) : ctx.moveTo(qx, qy) }
+    ctx.closePath(); ctx.fillStyle = K.coral3; ctx.fill()
+    for (let i = 0; i < 4; i++) {
+      const sx = i % 2 ? W : 0, sy = i < 2 ? 0 : H, dx = i % 2 ? 1 : -1, dy = i < 2 ? -1 : 1
+      for (const c of [[6, 6, 9], [15, 1, 5], [3, 16, 4]]) {
+        const bx = sx + dx * c[0], by = sy + dy * c[1]
+        ctx.beginPath(); ctx.arc(bx, by, c[2], 0, Math.PI * 2); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.bub, 0.75); ctx.stroke()
+        ctx.fillStyle = rgba(K.mid, 0.9); ctx.fill()
+        dotShape(ctx, bx - c[2] * 0.35, by - c[2] * 0.35, Math.max(0.6, c[2] * 0.2), rgba("#ffffff", 0.9))
+      }
+    }
+    const rs = seeded(17)
+    for (let i = 0; i < 3; i++) for (const side of [-1, 1]) {
+      const y = H * (0.3 + i * 0.22) + rs(-20, 20)
+      ctx.save(); ctx.translate(side < 0 ? 10 : W - 10, y); ctx.rotate(side * (Math.PI / 2 - 0.5))
+      kelp(ctx, 0, 0, 33, rs(0, 6), 6, K); ctx.restore()
+    }
+  }
 
   const g = ctx.createLinearGradient(0, 0, 0, H)
   g.addColorStop(0, K.mid); g.addColorStop(1, K.deep)
@@ -1717,32 +1678,35 @@ function deepsea(ctx, W, H, o) {
   ctx.lineTo(W, H); ctx.closePath()
   ctx.fillStyle = rgba(K.sand, 0.85); ctx.fill()
   const cr = seeded(13)
-  const corners = [[70, K.coral1], [190, K.coral2], [W - 90, K.coral3], [W - 220, K.coral1], [W * 0.5, K.coral2]]
-  corners.forEach((c) => { for (let k = 0; k < 2; k++) coral(ctx, cr, c[0] + k * 22, H - 14, -Math.PI / 2 + cr(-0.4, 0.4), cr(26, 38), 6, 0, c[1]) })
+  const corners = [[70 * k, K.coral1], [190 * k, K.coral2], [W - 90 * k, K.coral3], [W - 220 * k, K.coral1], [W * 0.5, K.coral2]]
+  corners.forEach((c) => { for (let n = 0; n < 2; n++) coral(ctx, cr, c[0] + n * 22 * k, H - 14, -Math.PI / 2 + cr(-0.4, 0.4), cr(26, 38) * k, 6 * k, 0, c[1]) })
   // kelp forest, taller at the corners
   const rk = seeded(3)
   for (let x = 24; x < W - 24; x += rk(26, 46)) {
-    const edge = Math.min(x, W - x)
-    const h = edge < 340 ? 120 + (340 - edge) * 0.55 + rk(0, 60) : (hash(x, 7) > 0.8 ? 50 + rk(0, 40) : 0)
-    if (h > 40) kelp(ctx, x, H - 12, h, rk(0, 6), 7, K)
+    const edge = Math.min(x, W - x) / k
+    const h = k * (edge < 340 ? 120 + (340 - edge) * 0.55 + rk(0, 60) : (hash(x, 7) > 0.8 ? 50 + rk(0, 40) : 0))
+    if (h > 40 * k) kelp(ctx, x, H - 12, h, rk(0, 6), 7, K)
   }
   // starfish
   for (const q of [[W * 0.5 + 60, H - 14], [W * 0.3, H - 10]]) {
     ctx.beginPath()
-    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 4 : 11; i ? ctx.lineTo(q[0] + Math.cos(a) * r, q[1] + Math.sin(a) * r) : ctx.moveTo(q[0] + Math.cos(a) * r, q[1] + Math.sin(a) * r) }
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = (i % 2 ? 4 : 11) * k; i ? ctx.lineTo(q[0] + Math.cos(a) * r, q[1] + Math.sin(a) * r) : ctx.moveTo(q[0] + Math.cos(a) * r, q[1] + Math.sin(a) * r) }
     ctx.closePath(); ctx.fillStyle = K.coral3; ctx.fill()
   }
 
   // jellyfish drifting at the top right, a school of fish at the left
-  jellyfish(ctx, W - 180, 112, 22, K); jellyfish(ctx, W - 250, 168, 13, K)
+  jellyfish(ctx, W - 180 * k, 112 * k, 22 * k, K); jellyfish(ctx, W - 250 * k, 168 * k, 13 * k, K)
   const rf = seeded(29)
-  for (let i = 0; i < 11; i++) fishShape(ctx, 90 + rf(0, 230) + i * 4, 200 + (i % 4) * 22 + rf(-8, 8), rf(0.7, 1.15), 1, i % 3 ? K.fish1 : K.fish2, K.fin)
-  fishShape(ctx, W * 0.45, 70, 1.5, -1, K.fish2, K.fin)
+  for (let i = 0; i < 11; i++) {
+    const fx = 90 + rf(0, 230) + i * 4, fy = 200 + (i % 4) * 22 + rf(-8, 8), fs = rf(0.7, 1.15)
+    if (!B || i < 6) fishShape(ctx, fx * k, fy * k, fs * Math.max(k, 0.7), 1, i % 3 ? K.fish1 : K.fish2, K.fin)
+  }
+  fishShape(ctx, W * 0.45, 70 * k, 1.5 * Math.max(k, 0.7), -1, K.fish2, K.fin)
 
   // bubbles
   const rb = seeded(61)
-  for (let i = 0; i < 70; i++) {
-    const side = i % 2, x = side ? W - 24 - rb(0, 300) * rb(0.2, 1) : 24 + rb(0, 300) * rb(0.2, 1)
+  for (let i = 0; i < (B ? 40 : 70); i++) {
+    const side = i % 2, x = side ? W - 24 - rb(0, 300) * k * rb(0.2, 1) : 24 + rb(0, 300) * k * rb(0.2, 1)
     const y = H - 40 - rb(0, 1) * rb(0, 1) * (H - 120), r = rb(1.2, 5)
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 0.9; ctx.strokeStyle = rgba(K.bub, 0.7); ctx.stroke()
     ctx.fillStyle = rgba(K.bub, 0.1); ctx.fill()
@@ -1882,142 +1846,6 @@ function steampunk(ctx, W, H, o) {
     rivet(ctx, x0 - 2, 11.5, 1.8, K); rivet(ctx, x0 + tw + 14, 11.5, 1.8, K)
     ctx.fillStyle = K.iron
     spaced(ctx, t, x0 + 6, 15, sp, "left")
-  }
-}
-
-// ---- FROST: winter. Frosted-glass band with snow crystals, plus icicles, snow drifts, snow-laden fir
-// branches with berries, frost ferns and big snowflakes that reach into the window area (click-through). ----
-function snowflake(ctx, x, y, R, rot, col, lw) {
-  ctx.save(); ctx.translate(x, y); ctx.rotate(rot)
-  ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.lineCap = "round"
-  ctx.beginPath()
-  for (let i = 0; i < 6; i++) {
-    ctx.save(); ctx.rotate(i * Math.PI / 3)
-    ctx.moveTo(0, 0); ctx.lineTo(R, 0)
-    for (const f of [0.38, 0.66]) {
-      const bx = R * f, bl = R * (0.36 - f * 0.12)
-      ctx.moveTo(bx, 0); ctx.lineTo(bx + bl * 0.7, bl * 0.7)
-      ctx.moveTo(bx, 0); ctx.lineTo(bx + bl * 0.7, -bl * 0.7)
-    }
-    ctx.restore()
-  }
-  ctx.stroke()
-  ctx.restore()
-}
-function firBranch(ctx, x, y, ang, len, K) {
-  ctx.save(); ctx.translate(x, y); ctx.rotate(ang)
-  ctx.lineCap = "round"
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(len, 0); ctx.lineWidth = 3; ctx.strokeStyle = K.bark; ctx.stroke()
-  for (let t = 10; t < len; t += 6) {
-    const nl = (len - t) * 0.28 + 8
-    for (const s of [-1, 1]) {
-      ctx.beginPath(); ctx.moveTo(t, 0); ctx.quadraticCurveTo(t + nl * 0.3, s * nl * 0.55, t + nl * 0.55, s * nl)
-      ctx.lineWidth = 1.7; ctx.strokeStyle = (t / 6) % 2 ? K.fir : K.firHi; ctx.stroke()
-    }
-  }
-  // snow along the top
-  ctx.beginPath(); ctx.moveTo(6, -2)
-  for (let t = 6; t < len; t += 10) ctx.quadraticCurveTo(t + 5, -(4 + (len - t) * 0.04), t + 10, -2)
-  ctx.lineWidth = 4; ctx.strokeStyle = rgba("#ffffff", 0.92); ctx.stroke()
-  ctx.restore()
-}
-function frostFern(ctx, x, y, ang, len, depth, col) {
-  const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len
-  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.lineWidth = Math.max(0.5, depth * 0.35); ctx.strokeStyle = col; ctx.stroke()
-  if (depth <= 0) return
-  for (let i = 1; i <= 4; i++) {
-    const t = i / 4.4, bx = x + (ex - x) * t, by = y + (ey - y) * t
-    frostFern(ctx, bx, by, ang + 0.75, len * 0.3 * (1 - t * 0.5), depth - 1, col)
-    frostFern(ctx, bx, by, ang - 0.75, len * 0.3 * (1 - t * 0.5), depth - 1, col)
-  }
-}
-function frost(ctx, W, H, o) {
-  const p = palette(o.colors)
-  const K = o.follow
-    ? { deep: p.dark, mid: mix(p.dark, p.cyan, 0.3), ice: mix(p.cyan, p.bright, 0.55), iceLine: p.cyan, snow: p.bright, fir: mix(p.green, p.dark, 0.4), firHi: p.green,
-        bark: mix(p.dark, p.orange, 0.3), berry: p.red, glow: p.cyan }
-    : { deep: "#071a36", mid: "#1c4a7a", ice: "#cdeeff", iceLine: "#7fd4ff", snow: "#ffffff", fir: "#1e5a48", firHi: "#2f8466",
-        bark: "#4a3326", berry: "#d8434e", glow: "#9fe0ff" }
-
-  // cold glow from the top corners
-  glowDisc(ctx, W * 0.2, 0, 420, K.glow, 0.16); glowDisc(ctx, W * 0.8, 0, 420, K.glow, 0.16)
-
-  const g = ctx.createLinearGradient(0, 0, 0, H)
-  g.addColorStop(0, K.mid); g.addColorStop(1, K.deep)
-  band(ctx, W, H, g, 16, 7, false)
-  const sheen = ctx.createLinearGradient(0, 0, W, H)
-  sheen.addColorStop(0, "rgba(255,255,255,0.28)"); sheen.addColorStop(0.5, "rgba(255,255,255,0.06)"); sheen.addColorStop(1, "rgba(255,255,255,0.2)")
-  band(ctx, W, H, sheen, 16, 7, false)
-
-  ctx.save(); bandClip(ctx, W, H, 16, 7)
-  for (let e = 0; e < 4; e++) {
-    const L = edgeLen(W, H, e)
-    for (let t = 14, i = 0; t < L - 8; t += 30, i++) {
-      const q = edgeXY(W, H, e, t + hash(t, e) * 12, 11)
-      snowflake(ctx, q[0], q[1], 5 + hash(t, e + 3) * 2.5, hash(i, e) * 3, rgba(K.ice, 0.55), 0.8)
-    }
-  }
-  ctx.restore()
-
-  rrPath(ctx, 15.5, 15.5, W - 31, H - 31, 8)
-  glowStroke(ctx, rgba(K.ice, 0.95), 1.3, 7, rgba(K.iceLine, 0.75))
-  rrPath(ctx, 1.5, 1.5, W - 3, H - 3, 15)
-  ctx.lineWidth = 1; ctx.strokeStyle = rgba("#ffffff", 0.7); ctx.stroke()
-
-  // frost ferns creeping over the glass from the corners
-  const cols = rgba(K.ice, 0.55)
-  frostFern(ctx, 24, 24, 0.78, 150, 3, cols); frostFern(ctx, W - 24, 24, Math.PI - 0.78, 150, 3, cols)
-  frostFern(ctx, 24, H - 24, -0.78, 120, 3, cols); frostFern(ctx, W - 24, H - 24, -Math.PI + 0.78, 120, 3, cols)
-  frostFern(ctx, 24, 24, 0.2, 90, 2, cols); frostFern(ctx, W - 24, H - 24, Math.PI + 0.2, 90, 2, cols)
-
-  // fir branches heavy with snow, top left and top right
-  firBranch(ctx, -6, 40, 0.28, 330, K); firBranch(ctx, -6, 40, 0.62, 200, K)
-  firBranch(ctx, W + 6, 56, Math.PI - 0.26, 300, K); firBranch(ctx, W + 6, 56, Math.PI - 0.6, 190, K)
-  const rb = seeded(8)
-  for (const q of [[170, 112], [268, 130], [W - 164, 126], [W - 250, 142], [90, 82]]) {
-    for (let k = 0; k < 3; k++) { const x = q[0] + rb(-8, 8), y = q[1] + rb(-6, 6); dotShape(ctx, x, y, 3.6, K.berry); dotShape(ctx, x - 1, y - 1, 1, rgba("#ffffff", 0.8)) }
-  }
-
-  // icicles
-  const ri = seeded(19)
-  for (let x = 130; x < W - 10; x += ri(14, 30)) {
-    const edge = Math.min(x, W - x)
-    const len = 14 + ri(0, 1) * ri(0, 1) * (edge > 480 ? 70 : 34)
-    const w = ri(4, 8)
-    const g2 = ctx.createLinearGradient(0, 22, 0, 22 + len)
-    g2.addColorStop(0, rgba(K.ice, 0.9)); g2.addColorStop(1, rgba(K.iceLine, 0.35))
-    ctx.beginPath(); ctx.moveTo(x - w, 20); ctx.lineTo(x + w, 20); ctx.lineTo(x + ri(-1, 1), 22 + len); ctx.closePath()
-    ctx.fillStyle = g2; ctx.fill()
-    ctx.beginPath(); ctx.moveTo(x - w * 0.3, 22); ctx.lineTo(x - 0.5, 20 + len * 0.8); ctx.lineWidth = 0.8; ctx.strokeStyle = rgba("#ffffff", 0.7); ctx.stroke()
-  }
-
-  // snow drifts along the bottom, deeper in the corners
-  ctx.beginPath(); ctx.moveTo(0, H)
-  for (let x = 0; x <= W; x += 12) {
-    const edge = Math.min(x, W - x)
-    ctx.lineTo(x, H - 16 - Math.max(0, 90 - edge * 0.2) * (0.6 + 0.4 * Math.sin(x * 0.02)) - Math.sin(x * 0.07) * 3)
-  }
-  ctx.lineTo(W, H); ctx.closePath()
-  const sg = ctx.createLinearGradient(0, H - 110, 0, H)
-  sg.addColorStop(0, "#ffffff"); sg.addColorStop(1, mix("#ffffff", K.iceLine, 0.55))
-  ctx.fillStyle = sg; ctx.fill()
-
-  // big snowflakes drifting down
-  const rs = seeded(55)
-  for (let i = 0; i < 26; i++) {
-    const side = i % 2, x = side ? W - 24 - rs(0, 360) * rs(0.2, 1) : 24 + rs(0, 360) * rs(0.2, 1), y = 50 + rs(0, 1) * rs(0, 1) * (H - 190)
-    snowflake(ctx, x, y, rs(5, 15), rs(0, 3), rgba("#ffffff", rs(0.55, 0.95)), 1.1)
-  }
-  ctx.fillStyle = rgba("#ffffff", 0.8)
-  for (let i = 0; i < 90; i++) { const side = i % 2; dotShape(ctx, side ? W - 24 - rs(0, 400) * rs(0.2, 1) : 24 + rs(0, 400) * rs(0.2, 1), 30 + rs(0, 1) * (H - 150), rs(0.8, 2), rgba("#ffffff", 0.8)) }
-
-  if (o.text) {
-    setFont(ctx, o, 10, true)
-    const t = o.text, sp = 3.5, tw = spacedWidth(ctx, t, sp), x0 = 40
-    pill(ctx, x0 - 4, 3, tw + 38, 17, rgba(K.deep, 0.95), K.ice, 1)
-    snowflake(ctx, x0 + 9, 11.5, 5.5, 0, K.ice, 1)
-    ctx.fillStyle = K.ice
-    spaced(ctx, t, x0 + 22, 15, sp, "left")
   }
 }
 
@@ -2415,242 +2243,7 @@ function pixel(ctx, width, height, o) {
   }
 }
 
-// ---- COSMIC: pixel-art deep space, ported from the hyprzome "cosmic" life world. A starfield band with
-// dithered nebula washes and a stepped rim; round 16-bit planets (some with moons) float at different
-// distances in the background and spill into the window area (click-through). Everything is drawn on a
-// PX-sized pixel grid into one buffer, then emitted as one path per colour. ----
-var COS_BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
-var COS_OFFS = [0, 35, -35, 180, 70, -70, 150, 210, 110]
-var COS_LIGHT = (function () { const v = [-0.55, -0.6, 0.58], n = Math.hypot(v[0], v[1], v[2]); return [v[0] / n, v[1] / n, v[2] / n] })()
-
-function cosTh(x, y) { return (COS_BAYER[((y & 3) << 2) | (x & 3)] + 0.5) / 16 }
-function cosNoise(x, y, s) {
-  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s | 0, 1442695041)) | 0
-  h = Math.imul(h ^ (h >>> 13), 1274126177)
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
-}
-function cosVNoise(x, y, s) {
-  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi
-  const a = xf * xf * (3 - 2 * xf), b = yf * yf * (3 - 2 * yf)
-  return (cosNoise(xi, yi, s) * (1 - a) + cosNoise(xi + 1, yi, s) * a) * (1 - b)
-    + (cosNoise(xi, yi + 1, s) * (1 - a) + cosNoise(xi + 1, yi + 1, s) * a) * b
-}
-function cosRng(seed) {   // mulberry32
-  let a = seed >>> 0
-  return function () {
-    a = (a + 0x6D2B79F5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-function cosPack(r, g, b, a) { return (((a === undefined ? 255 : a) << 24) | (b << 16) | (g << 8) | r) >>> 0 }
-function cosPackHex(h, a) { const c = rgb(h); return cosPack(c.r, c.g, c.b, a) }
-function cosAlpha(c, a) { return ((c & 0x00ffffff) | (a << 24)) >>> 0 }
-function cosCss(c) { return "rgba(" + (c & 255) + "," + ((c >> 8) & 255) + "," + ((c >> 16) & 255) + "," + ((c >>> 24) / 255).toFixed(3) + ")" }
-
-// OKLCH <-> sRGB, so a colour gets a four-tone ramp whose shadows run cool and highlights warm
-function cosLin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }
-function cosUnlin(c) { return Math.round(Math.min(1, Math.max(0, c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(Math.max(c, 0), 1 / 2.4) - 0.055)) * 255) }
-function cosToOklch(hx) {
-  const c = rgb(hx), r = cosLin(c.r), g = cosLin(c.g), b = cosLin(c.b)
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-  const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
-  const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
-  return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, Math.sqrt(A * A + B * B), (Math.atan2(B, A) * 180 / Math.PI + 360) % 360]
-}
-function cosFromOklch(L, C, h) {
-  const a = C * Math.cos(h * Math.PI / 180), b = C * Math.sin(h * Math.PI / 180)
-  const l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3)
-  const m = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3)
-  const s = Math.pow(L - 0.0894841775 * a - 1.2914855480 * b, 3)
-  return [cosUnlin(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
-          cosUnlin(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-          cosUnlin(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)]
-}
-function cosToward(h, target, amt) {
-  const d = ((target - h + 540) % 360) - 180
-  return (h + (d < 0 ? -1 : 1) * Math.min(Math.abs(d), amt) + 360) % 360
-}
-function cosRamp(L, C, h) {   // deep, shadow, base, light
-  const k = [[Math.max(0.12, L - 0.3), C * 0.95, cosToward(h, 275, 26)], [Math.max(0.2, L - 0.15), Math.min(C * 1.12, 0.3), cosToward(h, 275, 14)],
-             [L, C, h], [Math.min(0.96, L + 0.14), C * 0.72, cosToward(h, 85, 12)]]
-  return k.map(function (c) { const q = cosFromOklch(c[0], c[1], c[2]); return cosPack(q[0], q[1], q[2]) })
-}
-function cosTone(v, x, y) { return Math.max(0, Math.min(3, Math.floor(v * 3.999 + (cosTh(x, y) - 0.5) * 0.9))) }
-
-// a round planet of radius r (grid cells; cells are square so it stays circular) written straight into F.
-// depth 0 = far (hazy, faint over the window), 1 = near (full colour); inside the band it is always opaque.
-function cosPlanet(F, gw, gh, bandIn, cx, cy, r, R, depth, haze, seed, moon) {
-  const aWin = Math.round(55 + depth * 140), hr = rgb(haze)
-  const put = function (x, y, c, a) {
-    if (x < 0 || y < 0 || x >= gw || y >= gh) return
-    const inBand = x < bandIn || y < bandIn || x >= gw - bandIn || y >= gh - bandIn
-    const m = inBand ? 0.55 * (1 - depth * 0.6) : 0   // far planets melt into the band's starfield
-    const rr = (c & 255) * (1 - m) + hr.r * m, gg = ((c >> 8) & 255) * (1 - m) + hr.g * m, bb = ((c >> 16) & 255) * (1 - m) + hr.b * m
-    F[y * gw + x] = cosPack(rr | 0, gg | 0, bb | 0, inBand ? Math.min(255, a * 1.4 | 0) : a)
-  }
-  const gas = cosNoise(seed, 3, 5) < 0.55, phase = cosNoise(seed, 7, 5) * 6.28, halo = r * 0.32
-  for (let y = Math.floor(cy - r - halo); y <= cy + r + halo; y++) for (let x = Math.floor(cx - r - halo); x <= cx + r + halo; x++) {
-    const dx = (x + 0.5 - cx) / r, dy = (y + 0.5 - cy) / r, d = Math.hypot(dx, dy)
-    if (d > 1) {   // thin dithered atmosphere
-      const e = (d - 1) * r / halo
-      if (e < 1 && cosTh(x, y) < Math.pow(1 - e, 2) * 0.7) put(x, y, R[0], aWin * 0.6 | 0)
-      continue
-    }
-    let lum = Math.max(0, dx * COS_LIGHT[0] + dy * COS_LIGHT[1] + Math.sqrt(1 - d * d) * COS_LIGHT[2])
-    if (gas) lum += 0.1 * Math.sin(dy * (5 + r * 0.12) + phase + cosVNoise(x / 6, y / 3, seed) * 2.5)
-    else lum += (cosVNoise(x / (2 + r * 0.1), y / (2 + r * 0.1), seed) - 0.5) * 0.2
-    let t = cosTone(Math.min(1, lum * 0.9 + 0.12 * (1 - d)), x, y)
-    if (d > 0.86) t = lum < 0.4 ? 0 : lum > 0.72 ? 3 : t
-    put(x, y, R[t], aWin)
-  }
-  if (moon) {
-    const a = cosNoise(seed, 9, 5) * 6.28
-    cosPlanet(F, gw, gh, bandIn, cx + Math.cos(a) * r * 1.5, cy + Math.sin(a) * r * 1.5, Math.max(2, Math.round(r * 0.17)), R, depth, haze, seed + 1, false)
-  }
-}
-
-var cosCache = {}   // render key -> runs; one entry per monitor size / colour set, so a repaint only re-emits the rects
-function cosmic(ctx, W, H, o) {
-  const key = [W, H, o.px, o.follow, o.text, JSON.stringify(o.colors)].join("|")
-  if (!cosCache[key]) {
-    if (Object.keys(cosCache).length >= 8) cosCache = {}
-    cosCache[key] = cosRender(W, H, o)
-  }
-  const runs = cosCache[key], P = o.px || 3
-  for (const c in runs) {
-    const r = runs[c]
-    ctx.beginPath()
-    for (let i = 0; i < r.length; i += 3) ctx.rect(r[i] * P, r[i + 1] * P, r[i + 2] * P, P)
-    ctx.fillStyle = cosCss(Number(c))
-    ctx.fill()
-  }
-}
-
-// builds the pixel grid and returns it as horizontal runs per colour: { packedColour: [x, y, len, ...] }
-function cosRender(W, H, o) {
-  const p = palette(o.colors), P = o.px || 3, gw = Math.ceil(W / P), gh = Math.ceil(H / P), BC = 7
-  const K = o.follow
-    ? { base: p.dark, neb1: p.accent, neb2: p.cyan, star: p.bright, rim: lighter(p.accent, 1.3), rim2: p.accent }
-    : { base: "#070a1f", neb1: "#5a3fd0", neb2: "#2a7fb0", star: "#ebebff", rim: "#7f8fe8", rim2: "#3d4cb0" }
-  const cBase = cosPackHex(K.base), cInk = cosPackHex(mix(K.base, "#000000", 0.6)), cRim = cosPackHex(mix(K.rim, K.base, 0.2)), cRim2 = cosPackHex(mix(K.rim2, K.base, 0.2))
-  const cNeb1 = cosPackHex(mix(K.base, K.neb1, 0.28)), cNeb1b = cosPackHex(mix(K.base, K.neb1, 0.5))
-  const cNeb2 = cosPackHex(mix(K.base, K.neb2, 0.28)), cNeb2b = cosPackHex(mix(K.base, K.neb2, 0.5))
-  const starRgb = rgb(K.star), cStarA = cosPackHex(mix(K.base, K.star, 0.35)), cStarB = cosPackHex(mix(K.base, K.star, 0.7)), cStarC = cosPackHex(K.star)
-  const F = new Uint32Array(gw * gh)
-
-  // faint dithered nebula and stars over the window area. This loop covers the whole screen, so it runs on
-  // precomputed noise lattices with per-column weights instead of calling a noise function per cell.
-  const lattice = function (sx, sy, seed) {
-    const lw = Math.ceil(gw / sx) + 2, lh = Math.ceil(gh / sy) + 2, a = new Float32Array(lw * lh), xi = new Int32Array(gw), u = new Float32Array(gw)
-    for (let j = 0; j < lh; j++) for (let i = 0; i < lw; i++) a[j * lw + i] = cosNoise(i, j, seed)
-    for (let x = 0; x < gw; x++) { const fx = x / sx; xi[x] = fx | 0; u[x] = (fx - xi[x]) * (fx - xi[x]) * (3 - 2 * (fx - xi[x])) }
-    return { lw: lw, a: a, sx: sx, sy: sy, xi: xi, u: u }
-  }
-  const L1 = lattice(38, 30, 424242), L2 = lattice(11, 9, 424243)
-  const w1 = cosPack(rgb(K.neb1).r, rgb(K.neb1).g, rgb(K.neb1).b, 14), w2 = cosPack(rgb(K.neb2).r, rgb(K.neb2).g, rgb(K.neb2).b, 14)
-  const a1 = L1.a, a2 = L2.a, lw1 = L1.lw, lw2 = L2.lw
-  for (let y = BC; y < gh - BC; y += 2) {
-    const fy1 = y / L1.sy, yi1 = fy1 | 0, yf1 = fy1 - yi1, v1 = yf1 * yf1 * (3 - 2 * yf1), r1 = yi1 * lw1
-    const fy2 = y / L2.sy, yi2 = fy2 | 0, yf2 = fy2 - yi2, v2 = yf2 * yf2 * (3 - 2 * yf2), r2 = yi2 * lw2
-    for (let x = BC; x < gw - BC; x += 2) {
-      const i1 = r1 + L1.xi[x], u1 = L1.u[x]
-      const n1 = (a1[i1] * (1 - u1) + a1[i1 + 1] * u1) * (1 - v1) + (a1[i1 + lw1] * (1 - u1) + a1[i1 + lw1 + 1] * u1) * v1
-      if (n1 <= 0.31) continue
-      const i2 = r2 + L2.xi[x], u2 = L2.u[x]
-      const n = n1 * 0.65 + ((a2[i2] * (1 - u2) + a2[i2 + 1] * u2) * (1 - v2) + (a2[i2 + lw2] * (1 - u2) + a2[i2 + lw2 + 1] * u2) * v2) * 0.35
-      if (n <= 0.55) continue
-      for (let dy = 0; dy < 2 && y + dy < gh - BC; dy++) for (let dx = 0; dx < 2 && x + dx < gw - BC; dx++)
-        if (cosTh(x + dx, y + dy) < (n - 0.55) * 2.2) F[(y + dy) * gw + x + dx] = n > 0.66 ? w2 : w1
-    }
-  }
-  const srng = cosRng(99)
-  for (let i = Math.floor((gw - 2 * BC) * (gh - 2 * BC) * 0.0035); i > 0; i--) {
-    const x = BC + Math.floor(srng() * (gw - 2 * BC)), y = BC + Math.floor(srng() * (gh - 2 * BC)), r = srng() * 0.0035
-    if (!F[y * gw + x]) F[y * gw + x] = cosPack(starRgb.r, starRgb.g, starRgb.b, r < 0.0005 ? 60 : r < 0.0015 ? 32 : 18)
-  }
-  // band: rounded outer rim, starfield body with nebula dither, thin inner rim
-  const sdRR = function (px, py, x0, y0, w, h, r) {
-    const qx = Math.abs(px - (x0 + w / 2)) - (w / 2 - r), qy = Math.abs(py - (y0 + h / 2)) - (h / 2 - r)
-    return Math.sqrt(Math.pow(Math.max(qx, 0), 2) + Math.pow(Math.max(qy, 0), 2)) + Math.min(Math.max(qx, qy), 0) - r
-  }
-  for (let y = 0; y < gh; y++) {
-    const edgeRow = y < BC + 1 || y >= gh - BC - 1
-    for (let x = 0; x < gw; x++) {
-      if (!edgeRow && x >= BC + 1 && x < gw - BC - 1) { x = gw - BC - 2; continue }
-      const px = x + 0.5, py = y + 0.5, dOut = -sdRR(px, py, 0, 0, gw, gh, 5), dIn = sdRR(px, py, BC, BC, gw - 2 * BC, gh - 2 * BC, 2)
-      if (dOut < 0) { F[y * gw + x] = 0; continue }
-      if (dIn < 0) continue
-      let c
-      if (dOut < 1) c = cInk
-      else if (dOut < 2) c = cRim
-      else if (dIn < 1) c = cRim2
-      else {
-        c = cBase
-        const n = cosVNoise(x / 14, y / 11, 31) * 0.65 + cosVNoise(x / 5, y / 4, 32) * 0.35, hue = cosVNoise(x / 60, y / 40, 33) > 0.5
-        if (n > 0.5 && cosTh(x, y) < (n - 0.5) * 2.4) c = n > 0.62 ? (hue ? cNeb2b : cNeb1b) : (hue ? cNeb2 : cNeb1)
-        const r = cosNoise(x, y, 77)
-        if (r < 0.05) c = r < 0.004 ? cStarC : r < 0.014 ? cStarB : cStarA
-      }
-      F[y * gw + x] = c
-    }
-  }
-
-  // round planets scattered through the background at different distances: far ones are small, hazy and
-  // faint, near ones large and bright and cropped by the screen edge. Drawn far to near.
-  const themed = o.follow ? [p.accent, p.blue, p.magenta, p.cyan, p.green, p.byellow, p.orange, p.red].map(cosToOklch) : null
-  const colorOf = function (i) {
-    if (!themed) return [0.66 + (i % 3) * 0.05, 0.12, (i * 53 + 25) % 360]
-    const c = themed[(i * 3) % themed.length]
-    return [Math.min(0.8, Math.max(0.58, c[0])), Math.max(c[1], 0.06), c[2]]
-  }
-  const unit = Math.min(gw, gh * 1.6) / 420, s = Math.min(1, Math.max(0.55, unit * 1.15))
-  const planets = [   // x, y (fractions of the screen), radius in cells, depth 0..1, moon
-    [0.22, 0.2, 5, 0.05], [0.64, 0.8, 4, 0.0], [0.84, 0.2, 5, 0.1], [0.47, 0.985, 4, 0.1], [0.91, 0.72, 3, 0.0], [0.07, 0.8, 4, 0.05],
-    [0.07, 0.45, 13, 0.4], [0.68, 0.01, 12, 0.45, 1], [0.975, 0.35, 15, 0.5],
-    [0.035, 0.05, 34, 0.9, 1], [0.97, 0.94, 44, 1.0, 1], [0.31, 1.03, 26, 0.8]
-  ]
-  planets.forEach(function (q, i) {
-    const c = colorOf(i), R = cosRamp(c[0], c[1], c[2])
-    cosPlanet(F, gw, gh, BC + 1, Math.round(q[0] * gw), Math.round(q[1] * gh), Math.max(3, Math.round(q[2] * s)), R, q[3], K.base, i + 11, q[4])
-  })
-
-  // name plate on the top edge, 3x5 pixel font
-  if (o.text) {
-    const t = o.text, tw = t.length * 4 - 1, plw = tw + 6, plx = Math.floor((gw - plw) / 2)
-    const fill = function (x0, y0, w, h, c) { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) F[y * gw + x] = c }
-    fill(plx, 0, plw, 7, cInk)
-    fill(plx + 1, 1, plw - 2, 1, cRim); fill(plx + 1, 1, 1, 5, cRim); fill(plx + plw - 2, 1, 1, 5, cRim)
-    fill(plx + 2, 2, plw - 4, 4, cNeb1b)
-    for (let i = 0; i < t.length; i++) {
-      const g = PIXFONT[t[i]]
-      if (!g) continue
-      for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) if (g[r * 3 + c] === "1") F[(1 + r) * gw + plx + 3 + i * 4 + c] = r === 0 ? cStarC : cStarB
-    }
-  }
-
-  const runs = {}
-  for (let y = 0; y < gh; y++) {
-    let x = 0
-    while (x < gw) {
-      const c = F[y * gw + x]
-      if (!c) { x++; continue }
-      let n = 1
-      while (x + n < gw && F[y * gw + x + n] === c) n++
-      if (!runs[c]) runs[c] = []
-      runs[c].push(x, y, n)
-      x += n
-    }
-  }
-  return runs
-}
-
-// ---- MEGACITY: built from the wallpaper "wallhaven-w533px" (a rain-dark cyberpunk megacity). Palette from its
-// bright pixels: cyan strip lights, amber windows, orange and red signs, blue and violet billboards, a green/pink screen.
+// ---- MEGACITY: a rain-dark cyberpunk megacity. Palette: cyan strip lights, amber windows, orange and red signs, blue and violet billboards, a green/pink screen.
 // Motifs: steel scaffold truss band with a cyan strip-light rim, sagging cables, hanging neon signs, tilted billboards,
 // lit apartment blocks standing on the bottom edge, a glowing skybridge, flying taxis and a haze beam
 // (click-through decoration over the window area). ----
@@ -2903,13 +2496,13 @@ function megacity(ctx, W, H, o) {
 }
 
 // ---- GILDED: art nouveau gold, ornaments made with ComfyUI (assets/*.png) -----
-var _artAsked = {}
+// Image loading is per Canvas (one per monitor), so ask each Canvas itself, never a shared flag.
 function artUrl(ctx, o, name) {
   const cv = ctx.canvas
   if (!o.assets || !cv || !cv.isImageLoaded) return ""
-  const u = o.assets + name
+  const u = o.assets + name + (o.rev ? "?r=" + o.rev : "")   // o.rev: bumps when a picture changed, bypasses the Canvas image cache
   if (cv.isImageLoaded(u)) return u
-  if (!_artAsked[u]) { _artAsked[u] = true; cv.loadImage(u) }
+  if (!cv.isImageLoading(u) && !cv.isImageError(u)) cv.loadImage(u)
   return ""
 }
 function gilded(ctx, W, H, o) {
@@ -3001,13 +2594,281 @@ function pasteup(ctx, W, H, o) {
   }
 }
 
-var PAINTERS = { OMARCHY: omarchy, CYBERPUNK: cyberpunk, AURORA: aurora, HUD: hud, TERMINAL: terminal, GLASS: glass,
+// ---- RUNEFORGE / NEXUS / EMBERGOTH: game-UI frames. The 1920x1080 frame (assets/<style>_frame.png) is assembled by the ComfyUI graph
+// `frame_ui_assemble` from a rail strip (`frame_ui_rail`), a corner piece and a crest (`frame_ui_piece`); here it is cut like a 9-slice so any window size
+// keeps the corners and the crest undistorted and only stretches the rails along their length. Follow mode tints it with the theme accent. ----
+var UIFRAME = {
+  RUNEFORGE: { file: "runeforge_frame.png", cs: 160, crest: 250, trim: "#ff9a3c", ink: "#120c08" },
+  NEXUS: { file: "nexus_frame.png", cs: 160, crest: 250, trim: "#35e0ff", ink: "#070d14" },
+  EMBERGOTH: { file: "embergoth_frame.png", cs: 160, crest: 250, trim: "#ff3a2d", ink: "#0d0808" },
+  ABYSS: { file: "abyss_frame.png", cs: 160, crest: 250, trim: "#3fe0d0", ink: "#06121a" },
+  HANAMI: { file: "hanami_frame.png", cs: 160, crest: 250, trim: "#f58fb0", ink: "#0e0a10" },
+  WILDWOOD: { file: "wildwood_frame.png", cs: 160, crest: 250, trim: "#7ddc5a", ink: "#0c120a" },
+  DRIFTWOOD: { file: "driftwood_frame.png", cs: 30, crest: 0, trim: "#cfc8ba", ink: "#14130f" },
+  SLATE: { file: "slate_frame.png", cs: 30, crest: 0, trim: "#a9bdb2", ink: "#0d1214" },
+  LEATHER: { file: "leather_frame.png", cs: 30, crest: 0, trim: "#dcc9a2", ink: "#140b08" },
+  TIDEPOOL: { file: "tidepool_frame.png", cs: 160, crest: 250, trim: "#8fc7d8", ink: "#08121a" },
+  CHERRYBARK: { file: "cherrybark_frame.png", cs: 160, crest: 250, trim: "#e7b3bf", ink: "#140c0e" },
+  MOSSWOOD: { file: "mosswood_frame.png", cs: 160, crest: 250, trim: "#a6c46a", ink: "#0c120a" }
+}
+function uiframe(ctx, W, H, o, spec) {
+  const p = palette(o.colors)
+  const trim = o.follow ? p.accent : spec.trim
+  const img = artUrl(ctx, o, spec.file)
+  const SW = 1920, SH = 1080
+  if (img) {
+    const sc = Math.max(0.5, Math.min(1, W / 1500, H / 850))
+    const cs = spec.cs, cd = cs * sc, cw = spec.crest
+    const d = function (sx, sy, sw, sh, dx, dy, dw, dh) { if (sw > 0 && sh > 0 && dw > 0 && dh > 0) ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) }
+    const cx0 = SW / 2 - cw / 2, dcx0 = W / 2 - cw * sc / 2
+    d(0, 0, cs, cs, 0, 0, cd, cd); d(SW - cs, 0, cs, cs, W - cd, 0, cd, cd)
+    d(0, SH - cs, cs, cs, 0, H - cd, cd, cd); d(SW - cs, SH - cs, cs, cs, W - cd, H - cd, cd, cd)
+    d(cs, 0, cx0 - cs, cs, cd, 0, dcx0 - cd, cd)
+    d(cx0 + cw, 0, SW - cs - cx0 - cw, cs, dcx0 + cw * sc, 0, W - cd - dcx0 - cw * sc, cd)
+    d(cx0, 0, cw, cs, dcx0, 0, cw * sc, cd)
+    d(cs, SH - cs, SW - 2 * cs, cs, cd, H - cd, W - 2 * cd, cd)
+    d(0, cs, cs, SH - 2 * cs, 0, cd, cd, H - 2 * cd); d(SW - cs, cs, cs, SH - 2 * cs, W - cd, cd, cd, H - 2 * cd)
+    if (o.follow) {
+      ctx.globalCompositeOperation = "source-atop"
+      ctx.fillStyle = rgba(p.accent, 0.3); ctx.fillRect(0, 0, W, H)
+      ctx.globalCompositeOperation = "source-over"
+    }
+  } else band(ctx, W, H, mix(spec.ink, trim, 0.2), 12, 6, false)
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(spec.ink, 0.94); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 3); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 2); ctx.lineWidth = 1; ctx.strokeStyle = rgba(trim, 0.9); ctx.stroke()
+    ctx.fillStyle = mix(trim, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+function runeforge(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.RUNEFORGE) }
+function nexus(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.NEXUS) }
+function embergoth(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.EMBERGOTH) }
+function abyss(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.ABYSS) }
+function hanami(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.HANAMI) }
+function wildwood(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.WILDWOOD) }
+function driftwood(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.DRIFTWOOD) }
+function slate(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.SLATE) }
+function leather(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.LEATHER) }
+function tidepool(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.TIDEPOOL) }
+function cherrybark(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.CHERRYBARK) }
+function mosswood(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.MOSSWOOD) }
+
+// ---- BLUEPRINT: drafting sheet, grid, dimension lines; fitted: ruler strips and registration targets outside ----
+function blueprint(ctx, W, H, o) {
+  const p = palette(o.colors)
+  let bg = "#0a2748", ln = "#a8d8ff", gr = "#2d6aa6"
+  if (o.follow) { bg = mix(p.dark, p.accent, 0.22); ln = mix(p.accent, "#ffffff", 0.55); gr = mix(bg, p.accent, 0.45) }
+  const B = o.bleed || 0
+  if (B) {
+    // outer contour: a ruler strip along each edge and a registration target on each corner
+    const r = 13
+    ctx.fillStyle = rgba(bg, 0.96); ctx.strokeStyle = rgba(ln, 0.8); ctx.lineWidth = 1
+    ctx.fillRect(24, -r, W - 48, r + 2); ctx.fillRect(24, H - 2, W - 48, r + 2)
+    ctx.fillRect(-r, 24, r + 2, H - 48); ctx.fillRect(W - 2, 24, r + 2, H - 48)
+    ctx.beginPath()
+    ctx.moveTo(24, -r + 0.5); ctx.lineTo(W - 24, -r + 0.5); ctx.moveTo(24, H + r - 0.5); ctx.lineTo(W - 24, H + r - 0.5)
+    ctx.moveTo(-r + 0.5, 24); ctx.lineTo(-r + 0.5, H - 24); ctx.moveTo(W + r - 0.5, 24); ctx.lineTo(W + r - 0.5, H - 24)
+    ctx.stroke()
+    ctx.beginPath()
+    for (let x = 24, n = 0; x <= W - 24; x += 10, n++) {
+      const l = n % 5 === 0 ? 8 : 4
+      ctx.moveTo(x + 0.5, -2); ctx.lineTo(x + 0.5, -2 - l); ctx.moveTo(x + 0.5, H + 2); ctx.lineTo(x + 0.5, H + 2 + l)
+    }
+    for (let y = 24, n = 0; y <= H - 24; y += 10, n++) {
+      const l = n % 5 === 0 ? 8 : 4
+      ctx.moveTo(-2, y + 0.5); ctx.lineTo(-2 - l, y + 0.5); ctx.moveTo(W + 2, y + 0.5); ctx.lineTo(W + 2 + l, y + 0.5)
+    }
+    ctx.strokeStyle = rgba(ln, 0.75); ctx.stroke()
+    setFont(ctx, o, 8, false); ctx.fillStyle = rgba(ln, 0.85)
+    for (let x = 24, n = 0; x <= W - 70; x += 50, n++) if (n % 2 === 0 && n > 0) ctx.fillText(String(n * 50), x + 3, -4)
+    for (let i = 0; i < 4; i++) {
+      const cx = i % 2 ? W + 9 : -9, cy = i < 2 ? -9 : H + 9
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(i % 2 ? W - 4 : 4, i < 2 ? 4 : H - 4)
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(bg, 1); ctx.stroke()
+      ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI * 2); ctx.fillStyle = bg; ctx.fill()
+      ctx.lineWidth = 1; ctx.strokeStyle = ln; ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(cx - 14, cy); ctx.lineTo(cx + 14, cy); ctx.moveTo(cx, cy - 14); ctx.lineTo(cx, cy + 14); ctx.stroke()
+      ctx.beginPath(); ctx.arc(cx, cy, 2.2, 0, Math.PI * 2); ctx.fillStyle = ln; ctx.fill()
+    }
+  }
+  band(ctx, W, H, bg, 3, 2, false)
+  // paper grid inside the band
+  ctx.save(); bandClip(ctx, W, H, 3, 2)
+  ctx.beginPath()
+  for (let x = 0; x < W; x += 11) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H) }
+  for (let y = 0; y < H; y += 11) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5) }
+  ctx.lineWidth = 1; ctx.strokeStyle = rgba(gr, 0.35); ctx.stroke()
+  ctx.restore()
+  // sheet border: heavy outer line, light inner line, bright line hugging the windows
+  rrPath(ctx, 3.5, 3.5, W - 7, H - 7, 2); ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(ln, 0.9); ctx.stroke()
+  rrPath(ctx, 7.5, 7.5, W - 15, H - 15, 1); ctx.lineWidth = 1; ctx.strokeStyle = rgba(ln, 0.35); ctx.stroke()
+  rrPath(ctx, BAND - 0.5, BAND - 0.5, W - 2 * BAND + 1, H - 2 * BAND + 1, 2); ctx.lineWidth = 1.5; ctx.strokeStyle = ln; ctx.stroke()
+  // dimension line along the bottom: arrows at both ends, the window width in the gap
+  const dim = function (x0, x1, y, txt, vert) {
+    ctx.save()
+    if (vert) { ctx.translate(y, x0); ctx.rotate(Math.PI / 2); x1 -= x0; x0 = 0; y = 0 } else { ctx.translate(0, y); x1 -= 0 }
+    setFont(ctx, o, 9, false)
+    const tw = ctx.measureText(txt).width, mid = (x0 + x1) / 2
+    ctx.strokeStyle = rgba(ln, 0.9); ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x0, 0); ctx.lineTo(mid - tw / 2 - 5, 0); ctx.moveTo(mid + tw / 2 + 5, 0); ctx.lineTo(x1, 0)
+    ctx.moveTo(x0, -4); ctx.lineTo(x0, 4); ctx.moveTo(x1, -4); ctx.lineTo(x1, 4)
+    ctx.stroke()
+    ctx.fillStyle = ln
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0 + 7, -2.5); ctx.lineTo(x0 + 7, 2.5); ctx.closePath()
+    ctx.moveTo(x1, 0); ctx.lineTo(x1 - 7, -2.5); ctx.lineTo(x1 - 7, 2.5); ctx.closePath(); ctx.fill()
+    ctx.fillText(txt, mid - tw / 2, 3.5)
+    ctx.restore()
+  }
+  dim(130, W - 60, H - 11, String(Math.round(W - 2 * BAND)) + " px", false)
+  dim(60, H - 60, 11, String(Math.round(H - 2 * BAND)) + " px", true)
+  // registration crosshairs, middle of the top and right edges
+  const cross = function (cx, cy) {
+    ctx.beginPath(); ctx.arc(cx, cy, 4.5, 0, Math.PI * 2)
+    ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8)
+    ctx.lineWidth = 1; ctx.strokeStyle = rgba(ln, 0.8); ctx.stroke()
+  }
+  cross(W / 2, 12); cross(W - 11, H / 2)
+  // title block, top left
+  if (o.text) {
+    setFont(ctx, o, 11, true)
+    const t = o.text, sp = 2, tw = spacedWidth(ctx, t, sp), x0 = 34
+    ctx.fillStyle = bg; ctx.fillRect(x0 - 6, 3, tw + 62, 17)
+    ctx.lineWidth = 1; ctx.strokeStyle = ln; ctx.strokeRect(x0 - 5.5, 3.5, tw + 61, 16)
+    ctx.beginPath(); ctx.moveTo(x0 + tw + 8.5, 3.5); ctx.lineTo(x0 + tw + 8.5, 19.5); ctx.stroke()
+    ctx.fillStyle = ln; spaced(ctx, t, x0 + 1, 15.5, sp, "left")
+    setFont(ctx, o, 8, false); ctx.fillText("REV A", x0 + tw + 13, 14.5)
+  }
+}
+
+// ---- CORALREEF: Flux concept art (assets/coralreef_corners.png, cut by tools/coral-corners.py). Four coral corner pieces sit on a
+// dark teal rail; fitted to a small window they stick BLEED px out past the rectangle. Follow mode tints with the theme accent. ----
+var CORAL_PIECES = [[0, 0, 430, 300], [430, 0, 430, 300], [860, 0, 380, 328], [1240, 0, 380, 328]]
+function coralreef(ctx, W, H, o) {
+  const p = palette(o.colors)
+  const K = o.follow
+    ? { rail: mix(p.dark, "#000000", 0.25), glow: p.accent, gold: mix(p.accent, "#ffffff", 0.35), tint: p.accent }
+    : { rail: "#06222c", glow: "#3fe0d0", gold: "#e8a33a", tint: "" }
+  const B = o.bleed || 0
+  band(ctx, W, H, K.rail, 6, 4, false)
+  ctx.save(); bandClip(ctx, W, H, 6, 4)
+  ctx.lineWidth = 3; ctx.strokeStyle = rgba(K.glow, 0.18); rrPath(ctx, BAND - 3, BAND - 3, W - 2 * BAND + 6, H - 2 * BAND + 6, 5); ctx.stroke()
+  ctx.restore()
+  rrPath(ctx, BAND - 1.5, BAND - 1.5, W - 2 * BAND + 3, H - 2 * BAND + 3, 4); ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(K.glow, 0.9); ctx.stroke()
+  rrPath(ctx, 3.5, 3.5, W - 7, H - 7, 5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.75); ctx.stroke()
+  const pearl = function (x, y) {
+    ctx.beginPath(); ctx.arc(x, y, 3.4, 0, Math.PI * 2); ctx.fillStyle = mix(K.glow, "#ffffff", 0.7); ctx.fill()
+    ctx.beginPath(); ctx.arc(x - 1, y - 1, 1.2, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.fill()
+  }
+  const step = 88
+  for (let x = 190 + step / 2; x < W - 190; x += step) { pearl(x, 11); pearl(x, H - 11) }
+  for (let y = 150 + step / 2; y < H - 150; y += step) { pearl(11, y); pearl(W - 11, y) }
+  const img = artUrl(ctx, o, "coralreef_corners.png")
+  if (img) {
+    const sc = Math.max(0.3, Math.min(0.75, Math.min(W, H) * 0.34 / 300))
+    for (let i = 0; i < 4; i++) {
+      const s = CORAL_PIECES[i], w = s[2] * sc, h = s[3] * sc
+      ctx.drawImage(img, s[0], s[1], s[2], s[3], i % 2 ? W + B - w : -B, i < 2 ? -B : H + B - h, w, h)
+    }
+  }
+  if (K.tint) {
+    ctx.globalCompositeOperation = "source-atop"
+    ctx.fillStyle = rgba(K.tint, 0.22); ctx.fillRect(-B, -B, W + 2 * B, H + 2 * B)
+    ctx.globalCompositeOperation = "source-over"
+  }
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(K.rail, 0.95); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.9); ctx.stroke()
+    ctx.fillStyle = mix(K.glow, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+
+// ---- FROST / SAKURA / COSMIC: Flux concept art cut by tools/corner-pieces.py into transparent pieces (assets/<name>_pieces.png) on a drawn rail.
+// Pieces 0-3 are the corners (TL, TR, BL, BR); mid = indices of pieces centred on an edge. Fitted to a small window they stick BLEED px out. ----
+var PIECED = {
+  FROST: { file: "frost_pieces.png", dot: "diamond", mid: { l: 4, r: 5, t: 6, b: 7 },
+    pieces: [[0, 0, 340, 300], [340, 0, 340, 300], [680, 0, 340, 328], [1020, 0, 340, 328], [1360, 0, 170, 158], [1530, 0, 170, 158], [1700, 0, 224, 135], [1924, 0, 224, 150]],
+    rail: "#0a1a2e", glow: "#8fd4ff", line: "#e6f5ff" },
+  SAKURA: { file: "sakura_pieces.png", dot: "petal", mid: { l: 4, r: 5 },
+    pieces: [[0, 0, 480, 222], [480, 0, 480, 222], [960, 0, 300, 235], [1260, 0, 350, 235], [1610, 0, 200, 253], [1810, 0, 200, 253]],
+    rail: "#1a0a10", glow: "#f58fb0", line: "#d9a441" },
+  COSMIC: { file: "cosmic_pieces.png", dot: "star", mid: {},
+    pieces: [[0, 0, 430, 300], [430, 0, 340, 300], [770, 0, 340, 338], [1110, 0, 340, 338]],
+    rail: "#060818", glow: "#3fb6ff", line: "#a45cff" }
+}
+function pieced(ctx, W, H, o, S) {
+  const p = palette(o.colors)
+  const K = o.follow
+    ? { rail: mix(p.dark, "#000000", 0.25), glow: p.accent, line: mix(p.accent, "#ffffff", 0.35), tint: p.accent }
+    : { rail: S.rail, glow: S.glow, line: S.line, tint: "" }
+  const B = o.bleed || 0
+  band(ctx, W, H, K.rail, 6, 4, false)
+  ctx.save(); bandClip(ctx, W, H, 6, 4)
+  ctx.lineWidth = 3; ctx.strokeStyle = rgba(K.glow, 0.16); rrPath(ctx, BAND - 3, BAND - 3, W - 2 * BAND + 6, H - 2 * BAND + 6, 5); ctx.stroke()
+  ctx.restore()
+  rrPath(ctx, BAND - 1.5, BAND - 1.5, W - 2 * BAND + 3, H - 2 * BAND + 3, 4); ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(K.glow, 0.85); ctx.stroke()
+  rrPath(ctx, 3.5, 3.5, W - 7, H - 7, 5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.7); ctx.stroke()
+  const dot = function (x, y) {
+    ctx.fillStyle = mix(K.line, "#ffffff", 0.5)
+    if (S.dot === "diamond") {
+      ctx.beginPath(); ctx.moveTo(x, y - 4.5); ctx.lineTo(x + 3, y); ctx.lineTo(x, y + 4.5); ctx.lineTo(x - 3, y); ctx.closePath(); ctx.fill()
+    } else if (S.dot === "petal") {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(0.7); ctx.fillStyle = mix(K.glow, "#ffffff", 0.35)
+      ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+    } else {
+      ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.quadraticCurveTo(x, y, x + 5, y); ctx.quadraticCurveTo(x, y, x, y + 5)
+      ctx.quadraticCurveTo(x, y, x - 5, y); ctx.quadraticCurveTo(x, y, x, y - 5); ctx.fill()
+    }
+  }
+  const step = 88
+  for (let x = 190 + step / 2; x < W - 190; x += step) { dot(x, 11); dot(x, H - 11) }
+  for (let y = 150 + step / 2; y < H - 150; y += step) { dot(11, y); dot(W - 11, y) }
+  const img = artUrl(ctx, o, S.file)
+  if (img) {
+    const sc = Math.max(0.3, Math.min(0.75, Math.min(W, H) * 0.34 / 300))
+    const put = function (i, x, y) { const s = S.pieces[i]; ctx.drawImage(img, s[0], s[1], s[2], s[3], x, y, s[2] * sc, s[3] * sc) }
+    const sz = function (i) { return [S.pieces[i][2] * sc, S.pieces[i][3] * sc] }
+    for (let i = 0; i < 4; i++) put(i, i % 2 ? W + B - sz(i)[0] : -B, i < 2 ? -B : H + B - sz(i)[1])
+    const m = S.mid
+    if (m.l !== undefined) put(m.l, -B, H / 2 - sz(m.l)[1] / 2)
+    if (m.r !== undefined) put(m.r, W + B - sz(m.r)[0], H / 2 - sz(m.r)[1] / 2)
+    if (m.t !== undefined) put(m.t, W / 2 - sz(m.t)[0] / 2, -B)
+    if (m.b !== undefined) put(m.b, W / 2 - sz(m.b)[0] / 2, H + B - sz(m.b)[1])
+  }
+  if (K.tint) {
+    ctx.globalCompositeOperation = "source-atop"
+    ctx.fillStyle = rgba(K.tint, 0.22); ctx.fillRect(-B, -B, W + 2 * B, H + 2 * B)
+    ctx.globalCompositeOperation = "source-over"
+  }
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(K.rail, 0.95); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.9); ctx.stroke()
+    ctx.fillStyle = mix(K.glow, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+function frost(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.FROST) }
+function sakura(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.SAKURA) }
+function cosmic(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.COSMIC) }
+
+var PAINTERS = { CORALREEF: coralreef,OMARCHY: omarchy, CYBERPUNK: cyberpunk, AURORA: aurora, HUD: hud, TERMINAL: terminal, GLASS: glass,
   FOLIAGE: foliage, SACRED: sacred, KAWAII: kawaii, CELESTIAL: celestial, VAPORWAVE: vaporwave,
-  SAKURA: sakura, DEEPSEA: deepsea, STEAMPUNK: steampunk, FROST: frost, HALLOWEEN: halloween, COSMIC: cosmic, MEGACITY: megacity, GILDED: gilded, PASTEUP: pasteup }
+  SAKURA: sakura, DEEPSEA: deepsea, STEAMPUNK: steampunk, FROST: frost, HALLOWEEN: halloween, COSMIC: cosmic, MEGACITY: megacity, GILDED: gilded, PASTEUP: pasteup, BLUEPRINT: blueprint,
+  RUNEFORGE: runeforge, NEXUS: nexus, EMBERGOTH: embergoth, ABYSS: abyss, HANAMI: hanami, WILDWOOD: wildwood, DRIFTWOOD: driftwood, SLATE: slate, LEATHER: leather, TIDEPOOL: tidepool, CHERRYBARK: cherrybark, MOSSWOOD: mosswood }
+for (const n in PAINTERS) SMOOTH.push(n)
+NAMES = SMOOTH.concat(PIXEL)
 
 function paint(ctx, W, H, o) {
   ctx.reset()
+  const b = o.bleed || 0
+  W -= 2 * b; H -= 2 * b
   if (W < 120 || H < 120) return
+  if (b) ctx.translate(b, b)
   if (o.scale) ctx.scale(o.scale, o.scale)
   const f = PAINTERS[o.style]
   if (f) f(ctx, W, H, o)

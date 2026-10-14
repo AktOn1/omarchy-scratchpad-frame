@@ -1,25 +1,30 @@
 // Scratchpad Frame: a frame around the scratchpad special workspace
-// (SUPER + S). It rides the scratchpad's own slide animation:
-// Hyprland's specialWorkspace anim is "slidevert", speed 3 (300 ms),
-// easeOutQuint, entering from the bottom and leaving downwards.
+// (SUPER + S). It rides the scratchpad's own animation: by default Hyprland's specialWorkspace
+// anim, "slidevert", speed 3 (300 ms), easeOutQuint, entering from the bottom and leaving downwards.
+// A pad can come in and go out in its own way (AktKit.js EFFECTS, from the bottom or the right);
+// the frame repeats the same step, so it stays glued to the windows.
 // Smooth (vector) styles: OMARCHY, CYBERPUNK, AURORA, HUD, TERMINAL, GLASS,
 //                         FOLIAGE, SACRED, KAWAII, CELESTIAL, VAPORWAVE, SAKURA, DEEPSEA,
 //                         STEAMPUNK, FROST, HALLOWEEN, COSMIC, MEGACITY
 // 16-bit pixel styles:    CRYSTAL, ROYAL, WOOD, DUNGEON
 // "Follow Omarchy theme colors": every style recolours itself from the theme.
-// All drawing lives in FramePainter.js (add a style there, list it in NAMES).
+// All drawing lives in FramePainter.js (add a style there with one PAINTERS entry). StyleLive.qml reloads it, MenuModel.js and assets/ while the shell runs.
 // Picker: omarchy-shell scratchpad-frame menu  (centered list, Up/Down + Enter, F toggles follow, T toggles the title, Esc closes)
-// IPC: omarchy-shell scratchpad-frame menu | next | prev | set <name> | current | list | follow [on|off|toggle] | title [on|off|toggle] | lead <ms>
+// Bar icon + menu: BarWidget.qml (categories and a live thumbnail; hover previews the style on the open scratchpad).
+// IPC: omarchy-shell scratchpad-frame menu | next | prev | set <name> | current | list | follow [on|off|toggle] | title [on|off|toggle] | keepHidden [on|off|toggle] | lead <ms>
+//      preview <name> | previewPad <name> <pad> | previewEnd
 //      state (JSON of everything) | pads (JSON) | padsSet '{"pads": [...]}'
+// Scratchpad keys, directions and startup apps: AktEngine.qml (target scratchpad-frame.layers); the cards window: BarWidget.qml (target scratchpad-frame.panel).
+// Per-pad "fit" (AktEngine padSet <pad> fit on): the frame hugs the pad's windows instead of the whole screen.
 // More scratchpads: ~/.local/state/scratchpad-frame/pads.json lists extra special workspaces
-// (name, label, slide-in direction, optional own style). Without the file only SUPER + S gets a frame.
+// (name, label, slide-in direction, optional own style, outDirection, effect, outEffect). Without the file only SUPER + S gets a frame.
 
 import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
-import "FramePainter.js" as Painter
+import "AktKit.js" as Kit
 
 Scope {
   id: root
@@ -32,19 +37,31 @@ Scope {
   // One entry per framed special workspace: special:<name>, slides in from <direction>, own <style> or "" for the shared one.
   readonly property var defaultPads: [{ name: "scratchpad", label: "SCRATCHPAD", direction: "bottom", style: "" }]
   property var pads: defaultPads
-  readonly property var directions: ["bottom", "top", "left", "right"]
   readonly property int gap: 26      // outer gap on the scratchpad so the frame sits in the gap
   readonly property int px: 3        // size of one "16-bit" pixel
   readonly property int duration: 300
-  readonly property var curve: [0.23, 1, 0.32, 1]  // easeOutQuint (cubic bezier x1 y1 x2 y2)
+  readonly property var curve: [0.23, 1, 0.32, 1]  // easeOutQuint (cubic bezier x1 y1 x2 y2), the curve of Omarchy's own slide
   // The compositor starts its slide before the event reaches us and our
   // surface commit lands a frame or two later, so start this far into the curve.
   property int lead: 40
 
-  function ease(t) {
+  // The motion of one step (in or out) of a pad: how long, which curve, which way, whether it fades.
+  function stepOf(effect, side, w, h) {
+    const fx = Kit.effectInfo(effect)
+    const slides = fx.style === "slide" || fx.style === "slidefade"
+    return {
+      instant: fx.style === "none",
+      duration: fx.speed ? fx.speed * 100 : duration,
+      curve: fx.curve || curve,
+      fade: fx.style === "fade" || fx.style === "slidefade",
+      x: slides && side === "right" ? w : 0,
+      y: slides && side !== "right" ? h : 0
+    }
+  }
+
+  function ease(t, c) {
     if (t <= 0) return 0
     if (t >= 1) return 1
-    const c = curve
     const bx = (u) => 3 * (1 - u) * (1 - u) * u * c[0] + 3 * (1 - u) * u * u * c[2] + u * u * u
     const by = (u) => 3 * (1 - u) * (1 - u) * u * c[1] + 3 * (1 - u) * u * u * c[3] + u * u * u
     let lo = 0, hi = 1
@@ -55,7 +72,8 @@ Scope {
     return by((lo + hi) / 2)
   }
 
-  readonly property var styleNames: Painter.NAMES
+  StyleLive { id: live }
+  readonly property var styleNames: live.painter.NAMES
   readonly property string fontFamily: Qt.fontFamilies().indexOf("JetBrainsMono Nerd Font") >= 0
     ? "'JetBrainsMono Nerd Font'" : "monospace"
   property string style: "CRYSTAL"
@@ -76,6 +94,25 @@ Scope {
     menuOpen = true
   }
   function closeMenu() { menuOpen = false; preview = "" }
+
+  // The bar menu previews a style on the frame the same way; it clears itself if the bar menu goes away without saying so.
+  property bool barPreview: false
+  property string previewPad: ""     // the bar menu previews one scratchpad; "" means every pad without its own style
+  function setBarPreview(name, pad) {
+    name = String(name).toUpperCase()
+    if (styleNames.indexOf(name) < 0) return
+    previewPad = pad || ""
+    preview = name
+    barPreview = true
+    barPreviewTimer.restart()
+  }
+  function endBarPreview() {
+    barPreview = false
+    previewPad = ""
+    barPreviewTimer.stop()
+    if (!menuOpen) preview = ""
+  }
+  Timer { id: barPreviewTimer; interval: 60000; onTriggered: root.endBarPreview() }
 
   function setStyle(name, announce) {
     name = String(name).toUpperCase()
@@ -103,12 +140,32 @@ Scope {
       out.push({
         name: p.name,
         label: typeof p.label === "string" ? p.label.slice(0, 24) : p.name.toUpperCase(),
-        direction: directions.indexOf(p.direction) >= 0 ? p.direction : "bottom",
-        style: styleNames.indexOf(style) >= 0 ? style : ""
+        direction: Kit.cleanSide(p.direction) || "bottom",
+        outDirection: Kit.cleanSide(p.outDirection) || Kit.cleanSide(p.direction) || "bottom",
+        effect: Kit.cleanEffect(p.effect) || Kit.DEFAULT_EFFECT,
+        outEffect: Kit.cleanEffect(p.outEffect) || Kit.cleanEffect(p.effect) || Kit.DEFAULT_EFFECT,
+        style: styleNames.indexOf(style) >= 0 ? style : "",
+        fit: p.fit === true
       })
     }
     return out
   }
+  // The scratchpads (names, keys, directions, own styles, startup apps) are kept by the shared AktOn1 engine; this plugin frames them.
+  AktEngine {
+    id: layers
+    name: "scratchpad-frame"
+    label: "Scratchpad Frame"
+    scope: "pads"
+    styles: root.styleNames
+    sharedStyle: root.style
+  }
+  function syncPads() { if (layers.loaded) setPads(Kit.framePads(layers.state)) }
+  Connections {
+    target: layers
+    function onStateChanged() { root.syncPads() }
+    function onLoadedChanged() { root.syncPads() }
+  }
+
   function setPads(list) {
     pads = cleanPads(list)
     padsFile.setText(JSON.stringify(pads) + "\n")
@@ -116,7 +173,9 @@ Scope {
   }
   function padStyle(pad) {
     const own = pad.style !== "" ? pad.style : root.style
-    return menuOpen && preview !== "" && pad.style === "" ? preview : own
+    const previewing = (menuOpen || barPreview) && preview !== ""
+    const hit = previewPad !== "" && barPreview ? pad.name === previewPad : pad.style === ""
+    return previewing && hit ? preview : own
   }
   Timer { id: flashTimer; interval: 1400; onTriggered: root.flash = "" }
 
@@ -145,6 +204,7 @@ Scope {
     id: padsFile
     path: Quickshell.env("HOME") + "/.local/state/scratchpad-frame/pads.json"
     watchChanges: true
+    atomicWrites: true
     onFileChanged: reload()
     onLoaded: {
       try {
@@ -176,6 +236,9 @@ Scope {
       if (root.menuOpen) root.closeMenu(); else root.openMenu()
       return root.menuOpen ? "open" : "closed"
     }
+    function preview(name: string): string { root.setBarPreview(name, ""); return root.preview }
+    function previewPad(name: string, pad: string): string { root.setBarPreview(name, pad); return root.preview }
+    function previewEnd(): string { root.endBarPreview(); return "ok" }
     function list(): string { return root.styleNames.join(" ") }
     function set(name: string): string { root.setStyle(name, true); return root.style }
     function current(): string { return root.style }
@@ -186,7 +249,7 @@ Scope {
       return JSON.stringify(root.pads)
     }
     function state(): string {
-      return JSON.stringify({ style: root.style, follow: root.follow, title: root.showTitle, lead: root.lead,
+      return JSON.stringify({ style: root.style, follow: root.follow, title: root.showTitle, keepHidden: root.keepHidden, lead: root.lead,
                               styles: root.styleNames, pads: root.pads })
     }
     function lead(ms: string): string {
@@ -199,6 +262,12 @@ Scope {
       if (m === "on" || m === "off") root.setTitle(m === "on")
       else if (m === "toggle") root.setTitle(!root.showTitle)
       return root.showTitle ? "on" : "off"
+    }
+    function keepHidden(mode: string): string {
+      const m = String(mode).toLowerCase()
+      if (m === "on" || m === "off") root.setKeepHidden(m === "on")
+      else if (m === "toggle") root.setKeepHidden(!root.keepHidden)
+      return root.keepHidden ? "on" : "off"
     }
     function follow(mode: string): string {
       const m = String(mode).toLowerCase()
@@ -242,9 +311,7 @@ Scope {
     }
   }
   Component.onCompleted: { baseProc.running = true; applyGaps() }
-  Component.onDestruction: {
-    Quickshell.execDetached(["hyprctl", "eval", gapLua(gapped, baseGap)])
-  }
+  Component.onDestruction: Quickshell.execDetached(["hyprctl", "eval", gapLua(gapped, baseGap)])
 
   // Monitor name -> name of the special workspace showing there ("" when none)
   property var openOn: ({})
@@ -291,16 +358,164 @@ Scope {
     }
   }
 
+  // ---- keep a hidden scratchpad hidden after a flyout closes ---------------
+  // When a flyout (a layer surface with keyboard focus, e.g. a bar menu) closes, Hyprland
+  // refocuses the last focused window; if that sits on a hidden special workspace, the
+  // workspace pops open. Signature: a focus change right before activespecial while a
+  // flyout layer is open (or just closed). A real SUPER + S fires activespecial first.
+  property bool keepHidden: true
+  readonly property var permanentLayers: ["omarchy-background", "omarchy-bar", "omarchy-notifications", "scratchpad-frame", "wallpaper-fx"]
+  // Layers of this shell that never take keyboard focus (cursor/shader overlays, drag ghosts, OSD, banners): never a flyout.
+  readonly property var passiveLayers: ["omashaders-mouse", "omashaders-bend-marker", "omarchy-osd", "omarchy-bar-drag-ghost", "omarchy-bar-move-ghost",
+    "omarchy-lock-preview", "scratch-frame", "background-worker-talk-to-me-shield", "background-worker-talk-to-me-banner", "background-worker-talk-to-me-done"]
+  // A flyout is something a person opened a moment ago; a layer that has been open for minutes is a permanent overlay.
+  readonly property int flyoutMaxAgeMs: 120000
+  property var flyouts: ({})
+  property var ownLayers: ({})   // namespaces seen with this shell's process id
+  property double lastFocusMs: 0
+  property double lastFlyoutCloseMs: 0
+
+  function setKeepHidden(on) {
+    keepHidden = on
+    keepHiddenFile.setText(on ? "on\n" : "off\n")
+  }
+  FileView {
+    id: keepHiddenFile
+    path: Quickshell.env("HOME") + "/.local/state/scratchpad-frame/keep-hidden"
+    onLoaded: root.keepHidden = text().trim() !== "off"
+  }
+
+  // Other programs keep layers of their own open and close them all the time (mascots, the
+  // companion overlay, pills). They are no flyouts of this shell: only layers with this shell's
+  // process id count, both when they open and when they close.
+  property bool recheckAgain: false
+  function checkFlyouts() {
+    if (layerProc.running) { recheckAgain = true; return }
+    layerProc.running = true
+  }
+  Process {
+    id: layerProc
+    command: ["hyprctl", "-j", "layers"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          const pids = {}
+          let own = 0
+          const data = JSON.parse(text)
+          for (const mon of Object.keys(data))
+            for (const lvl of Object.keys(data[mon].levels))
+              for (const l of data[mon].levels[lvl]) {
+                pids[l.namespace] = l.pid
+                if (l.namespace === "scratchpad-frame") own = l.pid
+              }
+          if (own) {
+            const mine = Object.assign({}, root.ownLayers)
+            for (const n of Object.keys(pids)) if (pids[n] === own) mine[n] = true
+            root.ownLayers = mine
+            const next = Object.assign({}, root.flyouts)
+            for (const n of Object.keys(next))
+              if (pids[n] !== undefined && pids[n] !== own) delete next[n]
+            root.flyouts = next
+          }
+        } catch (e) {}
+        if (root.recheckAgain) { root.recheckAgain = false; layerProc.running = true }
+      }
+    }
+  }
+
+  function flyoutActive() {
+    const now = Date.now()
+    for (const n of Object.keys(flyouts)) if (now - flyouts[n] < flyoutMaxAgeMs) return true
+    return now - lastFlyoutCloseMs < 400
+  }
+  function isPadWorkspace(name) {
+    for (const p of pads) if ("special:" + p.name === name) return true
+    return false
+  }
+
   Connections {
     target: Hyprland
     function onRawEvent(event) {
       if (event.name === "configreloaded") { root.gapped = []; root.applyGaps(); return }
+      if (event.name === "activewindowv2") { root.lastFocusMs = Date.now(); return }
+      if (event.name === "openlayer" || event.name === "closelayer") {
+        if (root.permanentLayers.indexOf(event.data) >= 0 || root.passiveLayers.indexOf(event.data) >= 0) return
+        const next = Object.assign({}, root.flyouts)
+        if (event.name === "openlayer") { next[event.data] = Date.now(); root.checkFlyouts() }
+        else {
+          delete next[event.data]
+          if (root.ownLayers[event.data]) root.lastFlyoutCloseMs = Date.now()
+        }
+        root.flyouts = next
+        return
+      }
       // activespecial>>NAME,MONITOR  (NAME empty when closed)
       if (event.name !== "activespecial") return
       const i = event.data.lastIndexOf(",")
       if (i < 0) return
-      root.setOpen(event.data.slice(i + 1), event.data.slice(0, i))
+      const name = event.data.slice(0, i)
+      const monitor = event.data.slice(i + 1)
+      if (root.keepHidden && name !== "" && root.openOn[monitor] !== name && root.isPadWorkspace(name)
+          && Date.now() - root.lastFocusMs < 250 && root.flyoutActive()) {
+        // through the engine, so the pad goes out the way it is set to go out
+        if (layers.toggle(name.slice(8)) !== "ok")
+          Quickshell.execDetached(["hyprctl", "dispatch", 'hl.dsp.workspace.toggle_special("' + name.slice(8) + '")'])
+        return
+      }
+      root.setOpen(monitor, name)
     }
+  }
+
+  // ---- fit the frame to the windows ----------------------------------------
+  // A pad with "fit" on frames the bounding box of its windows (plus the gap) instead of the whole
+  // screen. Hyprland sends no event while a floating window is dragged or resized, so poll while
+  // such a pad is open. boxes["special:<pad>|<monitor>"] is {x, y, w, h} in layer coordinates, or
+  // {empty: true} when the pad has no windows (the frame stays full-size then).
+  property var boxes: ({})
+  readonly property bool fitActive: {
+    for (const p of pads)
+      if (p.fit) for (const m of Object.keys(openOn)) if (openOn[m] === "special:" + p.name) return true
+    return false
+  }
+  function applyBoxes(monitors, clients) {
+    const next = {}
+    for (const m of monitors) {
+      const ws = m.specialWorkspace ? m.specialWorkspace.name : ""
+      if (ws === "" || !pads.some(function(p) { return p.fit && "special:" + p.name === ws })) continue
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, n = 0
+      for (const c of clients) {
+        if (!c.mapped || c.monitor !== m.id || !c.workspace || c.workspace.name !== ws) continue
+        x0 = Math.min(x0, c.at[0]); y0 = Math.min(y0, c.at[1])
+        x1 = Math.max(x1, c.at[0] + c.size[0]); y1 = Math.max(y1, c.at[1] + c.size[1])
+        n++
+      }
+      const res = m.reserved || [0, 0, 0, 0]
+      next[ws + "|" + m.name] = n === 0 ? { empty: true }
+        : { x: x0 - m.x - res[0], y: y0 - m.y - res[1], w: x1 - x0, h: y1 - y0 }
+    }
+    const merged = Object.assign({}, boxes)
+    let changed = false
+    for (const k of Object.keys(next))
+      if (JSON.stringify(merged[k]) !== JSON.stringify(next[k])) { merged[k] = next[k]; changed = true }
+    if (changed) boxes = merged
+  }
+  Process {
+    id: boxProc
+    command: ["sh", "-c", "hyprctl monitors -j; echo '@@'; hyprctl clients -j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        const i = text.indexOf("\n@@\n")
+        if (i < 0) return
+        try { root.applyBoxes(JSON.parse(text.slice(0, i)), JSON.parse(text.slice(i + 4))) } catch (e) {}
+      }
+    }
+  }
+  Timer {
+    interval: 150
+    repeat: true
+    running: root.fitActive
+    triggeredOnStart: true
+    onTriggered: if (!boxProc.running) boxProc.running = true
   }
 
   // ---- one frame per monitor and pad -----------------------------------------
@@ -324,24 +539,55 @@ Scope {
       readonly property string style: root.padStyle(pad)
       readonly property string label: pad.label
       readonly property bool shown: root.openOn[screen.name] === workspaceName
-      // Where the pad rests when hidden: one screen length away, on the side it slides in from.
-      readonly property real hideX: pad.direction === "left" ? -screen.width : (pad.direction === "right" ? screen.width : 0)
-      readonly property real hideY: pad.direction === "top" ? -screen.height : (pad.direction === "bottom" ? screen.height : 0)
-      property real fromX: hideX
-      property real fromY: hideY
-      property real toX: hideX
-      property real toY: hideY
+      // Hyprland slides a special workspace in from the right or the bottom, one whole monitor length away.
+      property real fromX: screen.width
+      property real fromY: 0
+      property real toX: screen.width
+      property real toY: 0
+      property real fromA: 0
+      property real toA: 0
+      property var curveNow: root.curve
       property real prog: 1
+      property bool atRest: true            // fully out, so the next way in starts from its own side
+      // The slide offset and opacity; the frame rests at frameRect when shown.
+      readonly property real slideX: fromX + (toX - fromX) * root.ease(prog, curveNow)
+      readonly property real slideY: fromY + (toY - fromY) * root.ease(prog, curveNow)
+      readonly property real alphaNow: Math.max(0, Math.min(1, fromA + (toA - fromA) * root.ease(prog, curveNow)))
+      readonly property var box: pad.fit ? (root.boxes[workspaceName + "|" + screen.name] || null) : null
+      readonly property bool fitted: box !== null && box.empty !== true
+      readonly property real minFrame: 120   // FramePainter.paint draws nothing below this
+      readonly property real frameW: fitted ? Math.round(Math.min(area.width, Math.max(minFrame, box.w + 2 * root.gap))) : area.width
+      readonly property real frameH: fitted ? Math.round(Math.min(area.height, Math.max(minFrame, box.h + 2 * root.gap))) : area.height
+      readonly property real frameX: fitted ? Math.round(Math.max(0, Math.min(area.width - frameW, box.x + box.w / 2 - frameW / 2))) : 0
+      readonly property real bleed: fitted ? live.painter.bleedFor(style) : 0   // outer contour room on every side
+      readonly property real frameY: fitted ? Math.round(Math.max(0, Math.min(area.height - frameH, box.y + box.h / 2 - frameH / 2))) : 0
       onShownChanged: {
         slide.stop()
-        fromX = frame.x
-        fromY = frame.y
-        toX = shown ? 0 : hideX
-        toY = shown ? 0 : hideY
-        const lead = Math.min(root.lead, root.duration - 20) / root.duration
+        const step = root.stepOf(shown ? pad.effect : pad.outEffect, shown ? pad.direction : pad.outDirection, screen.width, screen.height)
+        const wasAtRest = atRest
+        fromX = slideX
+        fromY = slideY
+        fromA = alphaNow
+        if (shown && wasAtRest) {
+          fromX = step.x
+          fromY = step.y
+          fromA = step.fade ? 0 : 1
+        }
+        toX = shown ? 0 : step.x
+        toY = shown ? 0 : step.y
+        toA = shown ? 1 : (step.fade ? 0 : 1)
+        curveNow = step.curve
+        atRest = false
+        if (step.instant) {
+          fromX = toX; fromY = toY; fromA = toA
+          prog = 1
+          atRest = !shown
+          return
+        }
+        const lead = Math.min(root.lead, step.duration - 20) / step.duration
         prog = lead
         slide.from = lead
-        slide.duration = root.duration * (1 - lead)
+        slide.duration = step.duration * (1 - lead)
         slide.start()
       }
       NumberAnimation {
@@ -350,6 +596,7 @@ Scope {
         property: "prog"
         to: 1
         easing.type: Easing.Linear
+        onFinished: win.atRest = !win.shown
       }
 
       anchors { top: true; bottom: true; left: true; right: true }
@@ -366,17 +613,21 @@ Scope {
       visible: true
 
       Item {
+        id: area
         anchors.fill: parent
         clip: true
 
         Canvas {
           id: frame
-          width: parent.width
-          height: parent.height
+          width: win.frameW + 2 * win.bleed
+          height: win.frameH + 2 * win.bleed
           // Hyprland offsets the workspace by the full monitor size, not the
           // (bar-reduced) layer size, so travel the same distance.
-          x: win.fromX + (win.toX - win.fromX) * root.ease(win.prog)
-          y: win.fromY + (win.toY - win.fromY) * root.ease(win.prog)
+          x: win.frameX - win.bleed + win.slideX
+          y: win.frameY - win.bleed + win.slideY
+          opacity: win.alphaNow
+          // A fitted pad waits for its first window measurement so the full frame never flashes.
+          visible: !win.pad.fit || win.box !== null
 
           renderStrategy: Canvas.Cooperative
           onWidthChanged: requestPaint()
@@ -390,14 +641,18 @@ Scope {
             function onShowTitleChanged() { frame.requestPaint() }
           }
           Connections {
+            target: live
+            function onVersionChanged() { frame.requestPaint() }
+          }
+          Connections {
             target: win
             function onStyleChanged() { frame.requestPaint() }
             function onLabelChanged() { frame.requestPaint() }
           }
 
-          onPaint: Painter.paint(getContext("2d"), width, height, {
+          onPaint: live.painter.paint(getContext("2d"), width, height, {
             style: win.style, text: root.flash || (root.showTitle ? win.label : ""), colors: root.colors,
-            px: root.px, font: root.fontFamily, follow: root.follow, assets: Qt.resolvedUrl("assets/").toString()
+            px: root.px, font: root.fontFamily, follow: root.follow, bleed: win.bleed, assets: Qt.resolvedUrl("assets/").toString(), rev: live.assetRev
           })
         }
       }
@@ -422,7 +677,7 @@ Scope {
 
       StylePicker {
         anchors.fill: parent
-        names: root.styleNames
+        names: root.styleNames.filter(function (n) { return n.indexOf("TRY") !== 0 })
         colors: root.colors
         current: root.style
         follow: root.follow
