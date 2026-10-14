@@ -42,6 +42,7 @@ Item {
   readonly property var siblingSrc: sourceFor(siblingInfo.id)
   readonly property string separateId: isMember ? selfId : siblingInfo.id
 
+  property Item whatsNew: null
   property string view: "grid"
   property string editSource: ""
   property string editLayer: ""
@@ -140,7 +141,7 @@ Item {
 
   onOpenChanged: {
     if (open) { goHome(); srcA.poll(); srcB.poll(); if (!combineSave.running) combineFile.reload() }
-    else { capturing = ""; goHome() }
+    else { capturing = ""; goHome(); if (whatsNew) whatsNew.close() }
   }
 
   readonly property bool belowShown: editBelow !== null && view === "edit" && editPad !== null && editPad.layer !== true
@@ -201,7 +202,10 @@ Item {
       id: keys
       anchors.fill: parent
       focus: true
-      Keys.onEscapePressed: { if (!root.atHome) root.goHome(); else root.closeRequested() }
+      Keys.onEscapePressed: { if (root.whatsNew && root.whatsNew.open) root.whatsNew.close(); else if (!root.atHome) root.goHome(); else root.closeRequested() }
+      Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_U && event.modifiers === Qt.NoModifier && root.whatsNew) { root.whatsNew.toggle(); event.accepted = true }
+      }
 
       AktKeyCapture { window: root }
 
@@ -262,6 +266,14 @@ Item {
                       : Model.installCommand(root.siblingInfo.id))
                   onClicked: root.connected || root.isMember ? root.separateOut(root.separateId)
                       : (root.siblingSrc.up ? root.combineIn(root.siblingInfo.id) : root.copyInstall(root.siblingInfo.id))
+                }
+                WhatsNewButton {
+                  anchors.verticalCenter: parent.verticalCenter
+                  pluginId: root.selfId
+                  flyoutParent: keys
+                  fg: root.foreground
+                  fontFamily: root.fontFamily
+                  Component.onCompleted: root.whatsNew = this
                 }
               }
             }
