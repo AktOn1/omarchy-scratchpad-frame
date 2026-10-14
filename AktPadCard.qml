@@ -45,13 +45,14 @@ Column {
     spacing: Style.space(8)
     width: parent.width
 
-    TextField {
+    GuardedField {
       id: nameField
       visible: root.ownsIdentity
       width: parent.width - showButton.width - (removeButton.visible ? removeButton.width : 0) - parent.spacing * (removeButton.visible ? 2 : 1)
-      text: root.pad.label
+      maximumLength: 40
+      Binding { target: nameField; property: "text"; value: root.pad.label }   // a Binding, so typing does not break it
       foreground: root.source.foreground
-      font.family: root.source.fontFamily
+      fontFamily: root.source.fontFamily
       onEditingFinished: if (text !== root.pad.label && text.trim() !== "") root.source.run(["padSet", root.pad.id, "label", text.trim()])
     }
     Button {
@@ -338,12 +339,13 @@ Column {
         value: ""
         onChanged: function(v) { root.source.run(["appAdd", root.pad.id, v]); value = "" }
       }
-      TextField {
+      GuardedField {
         visible: root.ownsIdentity
         width: parent.width
+        maximumLength: 300
         placeholderText: "or type a command, then Enter"
         foreground: root.source.foreground
-        font.family: root.source.fontFamily
+        fontFamily: root.source.fontFamily
         onAccepted: if (text.trim() !== "") { root.source.run(["appAdd", root.pad.id, text.trim()]); text = "" }
       }
     }

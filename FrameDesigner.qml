@@ -95,14 +95,16 @@ Column {
     }
   }
 
-  component Field: TextField {
+  // Text boxes exist only while the panel is open and they are on screen, and never read the clipboard (see GuardedField.qml).
+  component Field: GuardedField {
     width: fm.width
     height: Style.space(32)
     verticalPadding: Style.space(3)
     foreground: fm.fg
-    font.family: fm.font
-    font.pixelSize: Style.font.body
-    Keys.onEscapePressed: function(e) { fm.parent.forceActiveFocus(); e.accepted = true }
+    fontFamily: fm.font
+    fontPixelSize: Style.font.body
+    handleEscape: true
+    onEscaped: fm.parent.forceActiveFocus()
   }
 
   // ------------------------------------------------------------ make
@@ -535,10 +537,10 @@ Column {
           fm.provModel = d.choice.model
           if (d.choice.custom && customField.text === "") customField.text = d.choice.custom
           fm.provEndpoint = d.choice.endpoint || ({ url: "", key_env: "", key_file: "" })
-          if (!modelField.activeFocus) modelField.text = fm.provModel
-          if (!epUrlField.activeFocus) epUrlField.text = fm.provEndpoint.url
-          if (!epKeyEnvField.activeFocus) epKeyEnvField.text = fm.provEndpoint.key_env
-          if (!epKeyFileField.activeFocus) epKeyFileField.text = fm.provEndpoint.key_file
+          if (!modelField.typing) modelField.text = fm.provModel
+          if (!epUrlField.typing) epUrlField.text = fm.provEndpoint.url
+          if (!epKeyEnvField.typing) epKeyEnvField.text = fm.provEndpoint.key_env
+          if (!epKeyFileField.typing) epKeyFileField.text = fm.provEndpoint.key_file
           var row = fm.rowOf(fm.provId)
           fm.provStrong = !row || row.strong !== false
           fm.provImage = !row || row.image !== false
@@ -609,12 +611,12 @@ Column {
           fm.imgId = d.choice.provider
           fm.imgComfy = d.choice.comfy
           fm.imgEndpoint = d.choice.endpoint
-          if (!comfyUrlField.activeFocus) comfyUrlField.text = fm.imgComfy.url
-          if (!comfyFlowField.activeFocus) comfyFlowField.text = fm.imgComfy.workflow
-          if (!imgEpUrlField.activeFocus) imgEpUrlField.text = fm.imgEndpoint.url
-          if (!imgEpModelField.activeFocus) imgEpModelField.text = fm.imgEndpoint.model
-          if (!imgEpKeyEnvField.activeFocus) imgEpKeyEnvField.text = fm.imgEndpoint.key_env
-          if (!imgEpKeyFileField.activeFocus) imgEpKeyFileField.text = fm.imgEndpoint.key_file
+          if (!comfyUrlField.typing) comfyUrlField.text = fm.imgComfy.url
+          if (!comfyFlowField.typing) comfyFlowField.text = fm.imgComfy.workflow
+          if (!imgEpUrlField.typing) imgEpUrlField.text = fm.imgEndpoint.url
+          if (!imgEpModelField.typing) imgEpModelField.text = fm.imgEndpoint.model
+          if (!imgEpKeyEnvField.typing) imgEpKeyEnvField.text = fm.imgEndpoint.key_env
+          if (!imgEpKeyFileField.typing) imgEpKeyFileField.text = fm.imgEndpoint.key_file
           if (d.choice.custom && imgCustomField.text === "") imgCustomField.text = d.choice.custom
           if (was !== fm.imgId || fm.ckptList.length === 0) fm.loadCheckpoints()
         } catch (e) { fm.say("Could not read the image model settings.", true) }

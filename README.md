@@ -4,6 +4,37 @@
 
 A frame around the Omarchy scratchpad (`SUPER + S`). The frame slides in and out together with the scratchpad.
 
+## What's new
+
+**1.8.0 (2026-10-15)**
+
+- **Safer text boxes.** The text boxes in the window (frame description, names, commands, AI and image-model settings) now exist only while the window is open and you can see them, and they never read the clipboard, so another program that fills the clipboard with something huge cannot freeze your desktop. The price: pasting into these boxes (Ctrl+V, Shift+Insert, middle click) is switched off; type the value instead.
+- **The frame stays visible over a fullscreen window.** When a window on a scratchpad goes fullscreen, the frame is drawn above it and the title tab moves down so it is not cut off. It slides back under the window when fullscreen ends.
+- **A What's new icon in the window's top right corner.** It lists these notes, turns accent coloured when an update is waiting and offers **Update now**. Press `U` to open it.
+- **Picking a key works with Super.** While you press a key for a scratchpad, combinations that start with Super reach the window, and the wait ends after 20 seconds. The springy entrance no longer uses a curve value Hyprland rejects.
+- **Style thumbnails appear faster.** The pictures for the styles load as soon as the picker opens, so the first hover over a style already shows them.
+
+**1.7.0**
+
+- **Ornaments from your own image model (optional).** In the frame designer, tick **Ornaments from my own image model (less predictable)** and pick your image model (a ComfyUI address with a checkpoint list from your server, an OpenAI-compatible images endpoint, or a custom command). Then **Make frame** also asks it for one corner ornament that matches your words, and the preview and **Apply** use it in all four corners. It is off until you tick it and the box is remembered. The normal frame (a style plus colours) stays the default and is what you get if the image model fails.
+
+**1.6.0**
+
+- **Describe a frame.** In the picker, type a few words ("calm night forest, mossy green") and press **Make frame**. Your own AI picks one of the existing styles and colours it. The result previews on that scratchpad; **Apply** keeps it, **Discard** puts the old look back. Works without "Follow Omarchy theme colors".
+
+**1.5.0 (2026-10-14)**
+
+- Fourteen new looks: the natural photo frames **Tidepool**, **Cherrybark**, **Mosswood**, **Driftwood**, **Slate** and **Leather**; the game-UI frames **Runeforge**, **Nexus**, **Embergoth**, **Abyss**, **Hanami** and **Wildwood**; plus **Blueprint** and **Coral Reef**. Frost, Sakura and Cosmic are redrawn from pictures.
+- The bar icon opens the scratchpads overview; click a scratchpad to pick the frame for that one scratchpad, with a live preview on it only. Hover a style to preview, Enter or Space keeps it.
+- Each scratchpad can slide in and out its own way (bottom or right, effects such as bounce, fade or instant); the frame follows.
+- "Fit the frame to the windows": a small floating window gets a frame just around it, and styles can stick out past it.
+- Styles load live: editing `FramePainter.js` or a picture in `assets/` shows at once, no shell restart.
+
+**1.4.0**
+
+- Scratchpads: the bar icon opens a window with every scratchpad as a card: name, key, how it moves, layout, apps started at login. Add scratchpads and give each its own key, way in, way out and startup apps.
+- Connect: next to Fullscreen App Auto Workspace, when that plugin is installed.
+
 ![Styles](preview.png)
 
 ![All styles, one after another](previews/styles.gif)
@@ -101,29 +132,6 @@ A style can draw PNG pictures instead of (or on top of) vector shapes: **Gilded*
 
 The Gilded pictures are original artwork (gold ornaments generated with a local image model, cut out and faded to the corners); they are mirrored in code for the other corners.
 
-## What's new
-
-**1.7.0**
-
-- **Ornaments from your own image model (optional).** In the frame designer, tick **Ornaments from my own image model (less predictable)** and pick your image model (a ComfyUI address with a checkpoint list from your server, an OpenAI-compatible images endpoint, or a custom command). Then **Make frame** also asks it for one corner ornament that matches your words, and the preview and **Apply** use it in all four corners. It is off until you tick it and the box is remembered. The normal frame (a style plus colours) stays the default and is what you get if the image model fails.
-
-**1.6.0**
-
-- **Describe a frame.** In the picker, type a few words ("calm night forest, mossy green") and press **Make frame**. Your own AI picks one of the existing styles and colours it. The result previews on that scratchpad; **Apply** keeps it, **Discard** puts the old look back. Works without "Follow Omarchy theme colors".
-
-**1.5.0 (2026-10-14)**
-
-- Fourteen new looks: the natural photo frames **Tidepool**, **Cherrybark**, **Mosswood**, **Driftwood**, **Slate** and **Leather**; the game-UI frames **Runeforge**, **Nexus**, **Embergoth**, **Abyss**, **Hanami** and **Wildwood**; plus **Blueprint** and **Coral Reef**. Frost, Sakura and Cosmic are redrawn from pictures.
-- The bar icon opens the scratchpads overview; click a scratchpad to pick the frame for that one scratchpad, with a live preview on it only. Hover a style to preview, Enter or Space keeps it.
-- Each scratchpad can slide in and out its own way (bottom or right, effects such as bounce, fade or instant); the frame follows.
-- "Fit the frame to the windows": a small floating window gets a frame just around it, and styles can stick out past it.
-- Styles load live: editing `FramePainter.js` or a picture in `assets/` shows at once, no shell restart.
-
-**1.4.0**
-
-- Scratchpads: the bar icon opens a window with every scratchpad as a card: name, key, how it moves, layout, apps started at login. Add scratchpads and give each its own key, way in, way out and startup apps.
-- Connect: next to Fullscreen App Auto Workspace, when that plugin is installed.
-
 ## Install
 
 ```bash
@@ -217,6 +225,8 @@ For a keybind: `omarchy-shell scratchpad-frame.bar toggle` (also `open` and `clo
 
 ## Describe a frame (your own AI)
 
+The text boxes in this window do not accept paste (Ctrl+V, Shift+Insert, middle click are ignored) and exist only while the window is open: type the description, address or command. That keeps the shell from ever reading your clipboard on behalf of a text box.
+
 Open the picker for a scratchpad (bar icon, click the scratchpad). At the top is a box, **Describe the frame you want**. Type a few words and press Enter or **Make frame**. An empty box does nothing, and nothing is sent until you press the button.
 
 - The AI answers with a small recipe: the name of one of the existing styles and, if it wants, some colours (`#rrggbb`). It never writes code, and nothing it answers is run. The answer is checked here: an unknown style or a colour that is not `#rrggbb` is rejected with a plain message and nothing changes.
@@ -246,7 +256,8 @@ From a terminal: `bin/frame-ai image providers`, `bin/frame-ai image use comfyui
 
 ## What it touches
 
-- Draws one click-through, transparent layer-shell window per monitor.
+- Draws one click-through, transparent layer-shell window per monitor. While a window on a scratchpad is fullscreen, that window moves to the overlay layer so the frame shows above it.
+- Never reads the clipboard: the window's text boxes are created only while it is open and ignore paste.
 - Reads `~/.local/state/omarchy/current/theme/colors.toml` (read only) for the theme-following styles.
 - Runs `hyprctl eval` to widen `gaps_out` on `special:scratchpad` to 26 px so the frame sits in the gap, re-applies it when Hyprland reloads its config, and sets it back to your global `general:gaps_out` when the plugin is disabled or removed. It never edits your Hyprland config files.
 - The bar widget runs `omarchy-shell scratchpad-frame ...` commands only; it reads the same style state file and `colors.toml`, and writes nothing of its own.

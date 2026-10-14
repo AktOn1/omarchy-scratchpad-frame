@@ -364,12 +364,13 @@ Item {
                   }
                 }
 
-                TextField {
+                GuardedField {
                   visible: section.src.scope === "pads" && section.src.up
                   width: parent.width
+                  maximumLength: 40
                   placeholderText: "New scratchpad name, then Enter"
                   foreground: root.foreground
-                  font.family: root.fontFamily
+                  fontFamily: root.fontFamily
                   onAccepted: { if (text.trim() !== "") section.src.run(["padAdd", text.trim(), "bottom"]); text = "" }
                 }
               }

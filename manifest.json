@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.akton1.scratchpad-frame",
   "name": "Scratchpad Frame",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "author": "AktOn1",
   "license": "MIT",
   "description": "A frame around the scratchpad (SUPER + S) that slides in and out with it. Forty-eight styles, from clean vector lines to photographed wood, slate and moss and game-UI frames; each scratchpad can have its own style, entrance and exit. Describe a frame in a few words and your own AI picks and colours a style, with an optional corner ornament from your own image model. Recolour styles from your Omarchy theme. Bar icon and keyboard style menu with live preview.",
