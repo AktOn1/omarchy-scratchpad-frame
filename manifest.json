@@ -5,7 +5,7 @@
   "version": "1.5.0",
   "author": "AktOn1",
   "license": "MIT",
-  "description": "A frame around the scratchpad (SUPER + S) that slides in and out with it. Thirty-eight styles, from clean vector lines to photographed wood, slate and moss and game-UI frames; each scratchpad can have its own style, entrance and exit. Optionally recolour every style from your Omarchy theme and hide the title. A bar icon opens the scratchpads overview and a keyboard (hjkl) style menu with groups, a thumbnail and live preview.",
+  "description": "A frame around the scratchpad (SUPER + S) that slides in and out with it. Forty-eight styles, from clean vector lines to photographed wood, slate and moss and game-UI frames; each scratchpad can have its own style, entrance and exit. Optionally recolour every style from your Omarchy theme and hide the title. A bar icon opens the scratchpads overview and a keyboard (hjkl) style menu with groups, a thumbnail and live preview.",
   "kinds": [
     "service",
     "bar-widget"

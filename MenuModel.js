@@ -8,6 +8,7 @@ var GROUPS = [
   { id: "worlds", label: "Worlds", styles: ["STEAMPUNK", "MEGACITY", "GILDED", "PASTEUP", "BLUEPRINT"] },
   { id: "game", label: "Game UI", styles: ["RUNEFORGE", "NEXUS", "EMBERGOTH", "ABYSS", "HANAMI", "WILDWOOD"] },
   { id: "natural", label: "Natural", styles: ["DRIFTWOOD", "SLATE", "LEATHER", "TIDEPOOL", "CHERRYBARK", "MOSSWOOD"] },
+  { id: "materials", label: "Materials", styles: ["WALNUT", "BAMBOO", "BIRCH", "LINEN", "TERRACOTTA", "BRICK", "SANDSTONE", "MARBLE", "CONCRETE", "RUST"] },
   { id: "pixel", label: "16-bit", styles: ["CRYSTAL", "ROYAL", "WOOD", "DUNGEON"] }
 ]
 
@@ -46,6 +47,16 @@ var DESC = {
   TIDEPOOL: "Wet blue-green rock with real shells, starfish and sea glass",
   CHERRYBARK: "Pink-brown cherry bark with real blossom twigs and petals",
   MOSSWOOD: "Mossy forest bark with real ferns, moss and mushrooms",
+  WALNUT: "Dark oiled walnut wood",
+  BAMBOO: "Pale green bamboo",
+  BIRCH: "White birch bark",
+  LINEN: "Natural linen weave",
+  TERRACOTTA: "Warm unglazed clay",
+  BRICK: "Weathered red brick",
+  SANDSTONE: "Golden desert sandstone",
+  MARBLE: "White veined marble",
+  CONCRETE: "Board-marked grey concrete",
+  RUST: "Rusted corrugated iron",
   CRYSTAL: "Pixel crystals",
   ROYAL: "Pixel royal gold",
   WOOD: "Pixel carved wood",

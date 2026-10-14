@@ -2609,7 +2609,17 @@ var UIFRAME = {
   LEATHER: { file: "leather_frame.png", cs: 30, crest: 0, trim: "#dcc9a2", ink: "#140b08" },
   TIDEPOOL: { file: "tidepool_frame.png", cs: 160, crest: 250, trim: "#8fc7d8", ink: "#08121a" },
   CHERRYBARK: { file: "cherrybark_frame.png", cs: 160, crest: 250, trim: "#e7b3bf", ink: "#140c0e" },
-  MOSSWOOD: { file: "mosswood_frame.png", cs: 160, crest: 250, trim: "#a6c46a", ink: "#0c120a" }
+  MOSSWOOD: { file: "mosswood_frame.png", cs: 160, crest: 250, trim: "#a6c46a", ink: "#0c120a" },
+  WALNUT: { file: "walnut_frame.png", cs: 30, crest: 0, trim: "#c9a27a", ink: "#140c08" },
+  BAMBOO: { file: "bamboo_frame.png", cs: 30, crest: 0, trim: "#d7e39a", ink: "#0e140a" },
+  BIRCH: { file: "birch_frame.png", cs: 30, crest: 0, trim: "#e6e0d2", ink: "#14130f" },
+  LINEN: { file: "linen_frame.png", cs: 30, crest: 0, trim: "#d9c7a3", ink: "#14110c" },
+  TERRACOTTA: { file: "terracotta_frame.png", cs: 30, crest: 0, trim: "#f0a070", ink: "#180d08" },
+  BRICK: { file: "brick_frame.png", cs: 30, crest: 0, trim: "#d99a85", ink: "#150a08" },
+  SANDSTONE: { file: "sandstone_frame.png", cs: 30, crest: 0, trim: "#f2c58a", ink: "#16100a" },
+  MARBLE: { file: "marble_frame.png", cs: 30, crest: 0, trim: "#e4e6ea", ink: "#0e1014" },
+  CONCRETE: { file: "concrete_frame.png", cs: 30, crest: 0, trim: "#b8bbbd", ink: "#0e0f10" },
+  RUST: { file: "rust_frame.png", cs: 30, crest: 0, trim: "#e8864a", ink: "#150a06" }
 }
 function uiframe(ctx, W, H, o, spec) {
   const p = palette(o.colors)
@@ -2654,6 +2664,16 @@ function leather(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.LEATHER) }
 function tidepool(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.TIDEPOOL) }
 function cherrybark(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.CHERRYBARK) }
 function mosswood(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.MOSSWOOD) }
+function walnut(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.WALNUT) }
+function bamboo(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.BAMBOO) }
+function birch(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.BIRCH) }
+function linen(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.LINEN) }
+function terracotta(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.TERRACOTTA) }
+function brick(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.BRICK) }
+function sandstone(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.SANDSTONE) }
+function marble(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.MARBLE) }
+function concrete(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.CONCRETE) }
+function rust(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.RUST) }
 
 // ---- BLUEPRINT: drafting sheet, grid, dimension lines; fitted: ruler strips and registration targets outside ----
 function blueprint(ctx, W, H, o) {
@@ -2859,7 +2879,7 @@ function cosmic(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.COSMIC) }
 var PAINTERS = { CORALREEF: coralreef,OMARCHY: omarchy, CYBERPUNK: cyberpunk, AURORA: aurora, HUD: hud, TERMINAL: terminal, GLASS: glass,
   FOLIAGE: foliage, SACRED: sacred, KAWAII: kawaii, CELESTIAL: celestial, VAPORWAVE: vaporwave,
   SAKURA: sakura, DEEPSEA: deepsea, STEAMPUNK: steampunk, FROST: frost, HALLOWEEN: halloween, COSMIC: cosmic, MEGACITY: megacity, GILDED: gilded, PASTEUP: pasteup, BLUEPRINT: blueprint,
-  RUNEFORGE: runeforge, NEXUS: nexus, EMBERGOTH: embergoth, ABYSS: abyss, HANAMI: hanami, WILDWOOD: wildwood, DRIFTWOOD: driftwood, SLATE: slate, LEATHER: leather, TIDEPOOL: tidepool, CHERRYBARK: cherrybark, MOSSWOOD: mosswood }
+  RUNEFORGE: runeforge, NEXUS: nexus, EMBERGOTH: embergoth, ABYSS: abyss, HANAMI: hanami, WILDWOOD: wildwood, DRIFTWOOD: driftwood, SLATE: slate, LEATHER: leather, TIDEPOOL: tidepool, CHERRYBARK: cherrybark, MOSSWOOD: mosswood, WALNUT: walnut, BAMBOO: bamboo, BIRCH: birch, LINEN: linen, TERRACOTTA: terracotta, BRICK: brick, SANDSTONE: sandstone, MARBLE: marble, CONCRETE: concrete, RUST: rust }
 for (const n in PAINTERS) SMOOTH.push(n)
 NAMES = SMOOTH.concat(PIXEL)
 

@@ -8,7 +8,7 @@ A frame around the Omarchy scratchpad (`SUPER + S`). The frame slides in and out
 
 ![All styles, one after another](previews/styles.gif)
 
-Thirty-eight styles. The smooth ones (drawn in code, or from pictures in `assets/`):
+Forty-eight styles. The smooth ones (drawn in code, or from pictures in `assets/`):
 
 | Style | Look |
 | --- | --- |
@@ -46,6 +46,16 @@ Thirty-eight styles. The smooth ones (drawn in code, or from pictures in `assets
 | **Driftwood** | weathered silvery-grey wood with grain and fine cracks, like a plain picture frame (`assets/driftwood_frame.png`) |
 | **Slate** | dark layered slate with a bit of green-grey stone (`assets/slate_frame.png`) |
 | **Leather** | brown leather with a hand-stitched edge (`assets/leather_frame.png`) |
+| **Walnut** | materials: dark oiled walnut wood (`assets/walnut_frame.png`) |
+| **Bamboo** | materials: pale green bamboo with fine fibres |
+| **Birch** | materials: white birch bark with dark marks and peels |
+| **Linen** | materials: natural beige linen weave with navy stitching |
+| **Terracotta** | materials: warm unglazed orange clay |
+| **Brick** | materials: weathered red brick with lime mortar |
+| **Sandstone** | materials: golden desert sandstone with wind-carved layers |
+| **Marble** | materials: white Carrara marble with soft grey veins |
+| **Concrete** | materials: board-marked grey concrete |
+| **Rust** | materials: rusted corrugated iron with flaking paint |
 
 And the 16-bit pixel-art ones: **Crystal**, **Royal**, **Wood** and **Dungeon**.
 
