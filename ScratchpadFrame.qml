@@ -13,6 +13,7 @@
 // Bar icon + menu: BarWidget.qml (categories and a live thumbnail; hover previews the style on the open scratchpad).
 // IPC: omarchy-shell scratchpad-frame menu | next | prev | set <name> | current | list | follow [on|off|toggle] | title [on|off|toggle] | keepHidden [on|off|toggle] | lead <ms>
 //      preview <name> | previewPad <name> <pad> | previewEnd
+//      looks (JSON) | previewLook <pad> <recipe JSON> | lookSet <pad> <recipe JSON> | lookClear <pad>   (frames made by bin/frame-ai: a style plus colours)
 //      state (JSON of everything) | pads (JSON) | padsSet '{"pads": [...]}'
 // Scratchpad keys, directions and startup apps: AktEngine.qml (target scratchpad-frame.layers); the cards window: BarWidget.qml (target scratchpad-frame.panel).
 // Per-pad "fit" (AktEngine padSet <pad> fit on): the frame hugs the pad's windows instead of the whole screen.
@@ -98,10 +99,12 @@ Scope {
   // The bar menu previews a style on the frame the same way; it clears itself if the bar menu goes away without saying so.
   property bool barPreview: false
   property string previewPad: ""     // the bar menu previews one scratchpad; "" means every pad without its own style
+  property var previewLook: null     // a frame-designer recipe being previewed on previewPad instead of a plain style
   function setBarPreview(name, pad) {
     name = String(name).toUpperCase()
     if (styleNames.indexOf(name) < 0) return
     previewPad = pad || ""
+    previewLook = null
     preview = name
     barPreview = true
     barPreviewTimer.restart()
@@ -109,6 +112,7 @@ Scope {
   function endBarPreview() {
     barPreview = false
     previewPad = ""
+    previewLook = null
     barPreviewTimer.stop()
     if (!menuOpen) preview = ""
   }
@@ -171,6 +175,48 @@ Scope {
     padsFile.setText(JSON.stringify(pads) + "\n")
     applyGaps()
   }
+  // ---- frames made by the frame designer (bin/frame-ai) --------------------------
+  // A look is data only: an existing style plus colours that replace the theme colours. The AI's answer is checked
+  // in bin/framedesign.py and again here, so a hand-edited looks.json cannot put anything else into the painter.
+  property var looks: ({})            // pad name -> {name, style, colors}
+  readonly property var lookColorKeys: ["accent", "background", "darker_background", "foreground", "bright_foreground", "muted",
+    "red", "green", "yellow", "orange", "blue", "cyan", "magenta", "brown"]
+  function cleanLook(l) {
+    if (!l || typeof l !== "object" || typeof l.style !== "string") return null
+    const style = l.style.toUpperCase()
+    if (styleNames.indexOf(style) < 0) return null
+    const colors = {}
+    if (l.colors && typeof l.colors === "object")
+      for (const k of lookColorKeys) {
+        const v = l.colors[k]
+        if (v === undefined) continue
+        if (typeof v !== "string" || !/^#[0-9a-fA-F]{6}$/.test(v)) return null
+        colors[k] = v.toLowerCase()
+      }
+    const name = typeof l.name === "string" ? l.name.replace(/[^\w .,'&-]/g, "").trim().slice(0, 40) : ""
+    return { name: name || style.charAt(0) + style.slice(1).toLowerCase(), style: style, colors: colors }
+  }
+  function cleanLooks(o) {
+    const out = {}
+    if (o && typeof o === "object")
+      for (const pad of Object.keys(o)) {
+        const l = /^[a-z0-9_-]{1,24}$/.test(pad) ? cleanLook(o[pad]) : null
+        if (l) out[pad] = l
+      }
+    return out
+  }
+  function saveLooks(next) {
+    looks = next
+    looksFile.setText(JSON.stringify(next) + "\n")
+  }
+  function parseLook(json) { try { return cleanLook(JSON.parse(json)) } catch (e) { return null } }
+  // The look a pad's frame shows right now: a previewed recipe, else its saved one, unless a plain style is being previewed on it.
+  function lookFor(pad) {
+    const previewing = (menuOpen || barPreview) && preview !== ""
+    const hit = previewPad !== "" && barPreview ? pad.name === previewPad : pad.style === ""
+    if (previewing && hit) return previewLook
+    return looks[pad.name] || null
+  }
   function padStyle(pad) {
     const own = pad.style !== "" ? pad.style : root.style
     const previewing = (menuOpen || barPreview) && preview !== ""
@@ -186,6 +232,13 @@ Scope {
       const n = text().trim().toUpperCase()
       if (root.styleNames.indexOf(n) >= 0) root.style = n
     }
+  }
+
+  FileView {
+    id: looksFile
+    path: Quickshell.env("HOME") + "/.local/state/scratchpad-frame/looks.json"
+    printErrors: false
+    onLoaded: { try { root.looks = root.cleanLooks(JSON.parse(text())) } catch (e) {} }
   }
 
   FileView {
@@ -239,6 +292,29 @@ Scope {
     function preview(name: string): string { root.setBarPreview(name, ""); return root.preview }
     function previewPad(name: string, pad: string): string { root.setBarPreview(name, pad); return root.preview }
     function previewEnd(): string { root.endBarPreview(); return "ok" }
+    function looks(): string { return JSON.stringify(root.looks) }
+    function previewLook(pad: string, json: string): string {
+      const l = root.parseLook(json)
+      if (!l || !root.pads.some(function(p) { return p.name === pad })) return "error: not a valid recipe or pad"
+      root.setBarPreview(l.style, pad)
+      root.previewLook = l
+      return "ok"
+    }
+    function lookSet(pad: string, json: string): string {
+      const l = root.parseLook(json)
+      if (!l || !root.pads.some(function(p) { return p.name === pad })) return "error: not a valid recipe or pad"
+      const next = Object.assign({}, root.looks)
+      next[pad] = l
+      root.saveLooks(next)
+      root.endBarPreview()
+      return "ok"
+    }
+    function lookClear(pad: string): string {
+      const next = Object.assign({}, root.looks)
+      delete next[pad]
+      root.saveLooks(next)
+      return "ok"
+    }
     function list(): string { return root.styleNames.join(" ") }
     function set(name: string): string { root.setStyle(name, true); return root.style }
     function current(): string { return root.style }
@@ -250,7 +326,7 @@ Scope {
     }
     function state(): string {
       return JSON.stringify({ style: root.style, follow: root.follow, title: root.showTitle, keepHidden: root.keepHidden, lead: root.lead,
-                              styles: root.styleNames, pads: root.pads })
+                              styles: root.styleNames, pads: root.pads, looks: root.looks })
     }
     function lead(ms: string): string {
       const n = parseInt(ms)
@@ -536,7 +612,8 @@ Scope {
 
       readonly property var pad: modelData.pad
       readonly property string workspaceName: "special:" + pad.name
-      readonly property string style: root.padStyle(pad)
+      readonly property var look: root.lookFor(pad)
+      readonly property string style: look ? look.style : root.padStyle(pad)
       readonly property string label: pad.label
       readonly property bool shown: root.openOn[screen.name] === workspaceName
       // Hyprland slides a special workspace in from the right or the bottom, one whole monitor length away.
@@ -648,11 +725,13 @@ Scope {
             target: win
             function onStyleChanged() { frame.requestPaint() }
             function onLabelChanged() { frame.requestPaint() }
+            function onLookChanged() { frame.requestPaint() }
           }
 
           onPaint: live.painter.paint(getContext("2d"), width, height, {
-            style: win.style, text: root.flash || (root.showTitle ? win.label : ""), colors: root.colors,
-            px: root.px, font: root.fontFamily, follow: root.follow, bleed: win.bleed, assets: Qt.resolvedUrl("assets/").toString(), rev: live.assetRev
+            style: win.style, text: root.flash || (root.showTitle ? win.label : ""),
+            colors: win.look ? Object.assign({}, root.colors, win.look.colors) : root.colors,
+            px: root.px, font: root.fontFamily, follow: root.follow || (win.look !== null && Object.keys(win.look.colors).length > 0), bleed: win.bleed, assets: Qt.resolvedUrl("assets/").toString(), rev: live.assetRev
           })
         }
       }

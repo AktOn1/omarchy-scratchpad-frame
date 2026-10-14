@@ -103,6 +103,10 @@ The Gilded pictures are original artwork (gold ornaments generated with a local 
 
 ## What's new
 
+**1.6.0**
+
+- **Describe a frame.** In the picker, type a few words ("calm night forest, mossy green") and press **Make frame**. Your own AI picks one of the existing styles and colours it. The result previews on that scratchpad; **Apply** keeps it, **Discard** puts the old look back. Works without "Follow Omarchy theme colors".
+
 **1.5.0 (2026-10-14)**
 
 - Fourteen new looks: the natural photo frames **Tidepool**, **Cherrybark**, **Mosswood**, **Driftwood**, **Slate** and **Leather**; the game-UI frames **Runeforge**, **Nexus**, **Embergoth**, **Abyss**, **Hanami** and **Wildwood**; plus **Blueprint** and **Coral Reef**. Frost, Sakura and Cosmic are redrawn from pictures.
@@ -207,6 +211,22 @@ Click the icon to open the scratchpads overview (one card per scratchpad). Click
 
 For a keybind: `omarchy-shell scratchpad-frame.bar toggle` (also `open` and `close`); `omarchy-shell scratchpad-frame.bar pick <scratchpad>` opens the window on that scratchpad's page. The big picker stays available as `omarchy-shell scratchpad-frame menu` (for a keybind).
 
+## Describe a frame (your own AI)
+
+Open the picker for a scratchpad (bar icon, click the scratchpad). At the top is a box, **Describe the frame you want**. Type a few words and press Enter or **Make frame**. An empty box does nothing, and nothing is sent until you press the button.
+
+- The AI answers with a small recipe: the name of one of the existing styles and, if it wants, some colours (`#rrggbb`). It never writes code, and nothing it answers is run. The answer is checked here: an unknown style or a colour that is not `#rrggbb` is rejected with a plain message and nothing changes.
+- The recipe is previewed live on that scratchpad's frame (about a minute at most). **Apply** keeps it for that scratchpad (`~/.local/state/scratchpad-frame/looks.json`), **Show again** previews it again, **Discard** drops it. Picking a plain style for the scratchpad afterwards, or **Remove**, goes back to a normal style. Recipe colours replace the theme colours for that frame, so it works with or without "Follow Omarchy theme colors".
+- **Which AI.** The **AI** button opens the settings. The list shows only the agent tools installed on your computer (Claude Code, Codex, Gemini CLI, OpenCode, Ollama) and starts on the one set with `omarchy default agent`, else the first installed one. Your pick is remembered in `~/.local/state/scratchpad-frame/ai.json`. No model is named unless you type one in the **Model** box (empty means the tool's own default).
+- **Custom command.** Any program that reads the prompt on standard input and prints text containing the JSON recipe. It is started directly, not through a shell.
+- **OpenAI-compatible endpoint.** Type the address, a model name, and where the key is: the name of an environment variable or a file (mode 600). The key is never shown or written to the state file. `https://` is required unless the address is on your own computer or home network. Redirects are not followed.
+- Two tick-boxes for a custom command or endpoint: **This AI can look at pictures** (not used by the frame designer) and **Strong enough for a full colour palette**. Without the second, only three colours (accent, background, darker background) are asked for.
+- **Test connection** sends a tiny test message and shows whether the answer came back.
+
+**Privacy: what is sent where.** Nothing is sent until you press **Make frame** or **Test connection**. Then the AI gets two things: the text you typed, and the list of style names with a one-line description each (plus the allowed colour names). No picture, no screenshot, no window title, no theme colours, no file names. It goes to the one tool you chose, which sends it to that tool's own service under its own terms: Claude Code to Anthropic, Codex to OpenAI, Gemini CLI to Google, OpenCode to whichever provider you configured in it, Ollama stays on your computer, an OpenAI-compatible endpoint receives it at the address you typed, a custom command goes wherever you point it. Without these buttons the plugin sends nothing and stays offline.
+
+From a terminal: `bin/frame-ai providers`, `bin/frame-ai use claude`, `bin/frame-ai make "warm sunset, copper"` (prints the recipe, applies nothing), `bin/frame-ai selftest` (offline checks, no AI call).
+
 ## What it touches
 
 - Draws one click-through, transparent layer-shell window per monitor.
@@ -214,6 +234,7 @@ For a keybind: `omarchy-shell scratchpad-frame.bar toggle` (also `open` and `clo
 - Runs `hyprctl eval` to widen `gaps_out` on `special:scratchpad` to 26 px so the frame sits in the gap, re-applies it when Hyprland reloads its config, and sets it back to your global `general:gaps_out` when the plugin is disabled or removed. It never edits your Hyprland config files.
 - The bar widget runs `omarchy-shell scratchpad-frame ...` commands only; it reads the same style state file and `colors.toml`, and writes nothing of its own.
 - Runs `hyprctl monitors -j` and `hyprctl getoption general:gaps_out -j` (read only).
+- Frame designer: when you press **Make frame** or **Test connection** it runs `bin/frame-ai` (Python 3), which runs the AI tool you chose (or calls the endpoint you typed). It keeps `ai.json` (your AI pick; never a key) and `looks.json` (applied recipes) in `~/.local/state/scratchpad-frame/`. See the privacy paragraph above.
 
 Requires a Hyprland with Lua config support (`hyprctl eval`), as shipped with current Omarchy.
 

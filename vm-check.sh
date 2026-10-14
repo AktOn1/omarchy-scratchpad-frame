@@ -40,6 +40,29 @@ else
   ipc $E.layers padSet fullscreen direction bottom >/dev/null
 fi
 
+# Frame designer: the AI recipe path over IPC (no AI is called), plus the offline self-tests
+if [ $E = scratchpad-frame ]; then
+  P=$(jq -r '.pads[0].name' <<<"$(ipc scratchpad-frame state)" 2>/dev/null)
+  R='{"name":"Mossy night","style":"FOLIAGE","colors":{"accent":"#2e8b57","background":"#0b1a12"}}'
+  r=$(ipc scratchpad-frame previewLook "$P" "$R"); [ "$r" = ok ] && ok "frame designer: recipe previews" || bad "previewLook: $r"
+  sleep 1; [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/look-preview.png" 2>/dev/null
+  r=$(ipc scratchpad-frame previewLook "$P" '{"style":"NOPE"}'); case $r in error*) ok "frame designer: unknown style rejected";; *) bad "bad style accepted: $r";; esac
+  r=$(ipc scratchpad-frame previewLook "$P" '{"style":"FROST","colors":{"accent":"url(x)"}}'); case $r in error*) ok "frame designer: code-like colour rejected";; *) bad "bad colour accepted: $r";; esac
+  ipc scratchpad-frame previewEnd >/dev/null
+  r=$(ipc scratchpad-frame lookSet "$P" "$R"); [ "$r" = ok ] && ok "frame designer: Apply" || bad "lookSet: $r"
+  sleep 1
+  jq -e --arg p "$P" '.looks[$p].style=="FOLIAGE" and .looks[$p].colors.accent=="#2e8b57"' <<<"$(ipc scratchpad-frame state)" >/dev/null && ok "frame designer: recipe in state" || bad "recipe missing from state"
+  jq -e --arg p "$P" '.[$p].style=="FOLIAGE"' ~/.local/state/scratchpad-frame/looks.json >/dev/null 2>&1 && ok "frame designer: looks.json written" || bad "looks.json not written"
+  r=$(ipc scratchpad-frame lookClear "$P"); [ "$r" = ok ] && ok "frame designer: Remove" || bad "lookClear: $r"
+  jq -e --arg p "$P" '.looks|has($p)|not' <<<"$(ipc scratchpad-frame state)" >/dev/null && ok "frame designer: recipe gone" || bad "recipe still in state"
+  ipc scratchpad-frame.bar pick "$P" >/dev/null; sleep 3
+  [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/picker-designer.png" 2>/dev/null
+  ipc scratchpad-frame.bar close >/dev/null
+  if command -v python3 >/dev/null; then
+    out=$(python3 "$PLUGIN_DIR/bin/frame-ai" selftest 2>&1); case $out in *"selftest: PASS"*) ok "frame designer: offline self-test";; *) bad "frame-ai selftest: ${out: -200}";; esac
+  fi
+fi
+
 ipc $E.panel open >/dev/null; sleep 2
 [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/alone.png" 2>/dev/null
 if [ $E = scratchpad-frame ]; then

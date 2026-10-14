@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""frame-ai: the frame designer's way to your own AI. Nothing is sent until `make` or `test` is run.
+
+  frame-ai providers [--json]            the AI tools installed on this machine (+ endpoint, + Custom command), the remembered choice
+  frame-ai use PROVIDER [--model M] [--custom CMD]
+  frame-ai use endpoint --url URL --model M [--key-env VAR | --key-file PATH]
+  frame-ai use --can-see 0|1 --strong 0|1  what a Custom command / endpoint model can do
+  frame-ai test [--json]                 "Test connection": a tiny real round trip with the remembered choice
+  frame-ai make "DESCRIPTION" [--json]   ask the AI for a frame recipe (style + colours); prints it, applies nothing
+  frame-ai selftest                      offline checks (no AI call, no network)
+Which AI: the remembered pick, else Omarchy's default agent (`omarchy default agent`), else the first installed tool.
+No model is named unless you type one. See aiprov.py for the tested call of each tool.
+"""
+import json
+import os
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import aiprov as P  # noqa: E402
+import framelib as L  # noqa: E402
+import framedesign as M  # noqa: E402
+
+
+def out(a, obj, text):
+    print(json.dumps(obj) if "--json" in a else text)
+
+
+def cmd_providers(a):
+    ch = P.choice()
+    rows = []
+    for p in P.providers():
+        rows.append({"id": p["id"], "label": p["label"], "strong": p["strong"], "image": p["image"], "exe": p.get("exe_path", ""),
+                     "models": [{"id": m, "label": l} for m, l in p["models"]], "default_model": p["default_model"]})
+        if p["id"] in ("custom", "endpoint"):
+            rows[-1].update(strong=P.is_strong(dict(ch, provider=p["id"])), image=P.can_see(dict(ch, provider=p["id"])))
+    obj = {"choice": ch, "providers": rows, "available": P.availability(ch)["available"]}
+    text = "\n".join("%s%-9s %s%s" % ("* " if r["id"] == ch["provider"] else "  ", r["id"], r["label"],
+                                      ("  models: " + ", ".join(m["id"] or "default" for m in r["models"])) if r["models"] else "") for r in rows)
+    out(a, obj, text)
+    return 0
+
+
+def cmd_use(a):
+    it = iter(a)
+    prov, kw, ep, caps = None, {}, {}, {}
+    for x in it:
+        if x == "--model":
+            kw["model"] = P.clean_model(next(it, ""))
+        elif x == "--custom":
+            kw["custom"] = next(it, "")
+        elif x in ("--url", "--key-env", "--key-file"):
+            ep[x[2:].replace("-", "_")] = next(it, "").strip()
+        elif x in ("--can-see", "--strong"):
+            caps["image" if x == "--can-see" else "strong"] = next(it, "") in ("1", "true", "yes")
+        elif x != "--json":
+            prov = x
+    if prov is not None:
+        if prov not in {p["id"] for p in P.PROVIDERS} | {"custom", "endpoint"}:
+            raise L.Bad("Unknown AI “%s”" % prov)
+        kw["provider"] = prov
+        if "model" not in kw:
+            kw["model"] = (P.load_choice().get("models") or {}).get(prov, P.info_of(prov)["default_model"])
+    if "model" in kw:
+        kw["models"] = dict(P.load_choice().get("models") or {}, **{kw.get("provider") or P.choice()["provider"]: kw["model"]})
+    if ep:
+        kw["endpoint"] = dict(P.choice()["endpoint"], **ep)
+    if caps:
+        kw["caps"] = dict(P.choice()["caps"], **caps)
+    P.save_choice(**kw)
+    ch = P.choice()
+    out(a, {"ok": True, "choice": ch}, "AI: %s %s" % (ch["provider"], ch["model"]))
+    return 0
+
+
+def cmd_test(a):
+    r = P.test()
+    out(a, r, ("works (%s s)" % r.get("seconds")) if r["ok"] else "failed: " + r["error"])
+    return 0 if r["ok"] else 1
+
+
+def cmd_make(a):
+    words = [x for x in a if x != "--json"]
+    r = M.make(" ".join(words))
+    out(a, r, json.dumps(r["recipe"]) if r["ok"] else "failed: " + r["error"])
+    return 0 if r["ok"] else 1
+
+
+def cmd_selftest(a):
+    bad = 0
+    for f in ("aiprov_selftest.py", "framedesign_selftest.py"):
+        r = subprocess.run([sys.executable, os.path.join(L.HERE, f)], capture_output=True, text=True)
+        print(f + ": " + (r.stdout.strip().splitlines() or ["no output"])[-1])
+        if r.returncode:
+            bad += 1
+            print(r.stdout[-1500:] + r.stderr[-800:])
+    print("selftest: %s" % ("PASS" if not bad else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+def main():
+    a = sys.argv[1:]
+    cmds = {"providers": cmd_providers, "use": cmd_use, "test": cmd_test, "make": cmd_make, "selftest": cmd_selftest}
+    if not a or a[0] not in cmds:
+        print(__doc__)
+        return 0 if not a or a[0] in ("-h", "--help", "help") else 2
+    try:
+        return cmds[a[0]](a[1:])
+    except L.Bad as e:
+        out(a, {"ok": False, "error": str(e)}, "error: " + str(e))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

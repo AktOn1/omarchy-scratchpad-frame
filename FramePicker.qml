@@ -95,6 +95,10 @@ Column {
 
   Rectangle { width: pick.width; height: 1; color: Qt.rgba(pick.fg.r, pick.fg.g, pick.fg.b, 0.2) }
 
+  FrameDesigner { width: pick.width; host: pick.host; padId: pick.padId; fg: pick.fg }
+
+  Rectangle { width: pick.width; height: 1; color: Qt.rgba(pick.fg.r, pick.fg.g, pick.fg.b, 0.2) }
+
   Row {
     id: body
     width: pick.width

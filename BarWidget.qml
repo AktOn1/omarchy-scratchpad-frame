@@ -20,6 +20,7 @@ BarWidget {
   property bool showTitle: true
   property var themeColors: ({})
   property var pads: []
+  property var looks: ({})   // pad name -> {name, style, colors}: frames made with the frame designer
   StyleLive { id: live }
   readonly property var painter: live.painter   // FramePicker draws its thumbnail with these
   readonly property var menu: live.menu
@@ -45,6 +46,7 @@ BarWidget {
         root.styles = s.styles || []
         root.current = s.style || ""
         root.pads = s.pads || []
+        root.looks = s.looks || ({})
         root.follow = !!s.follow
         root.showTitle = s.title !== false
       } catch (e) {}
@@ -70,6 +72,12 @@ BarWidget {
   // ---------------------------------------------------------------- actions
   function keep(pad, name) {
     Quickshell.execDetached(["omarchy-shell", "-q", "scratchpad-frame.layers", "padSet", pad, "style", name])
+    if (root.looks[pad]) {
+      Quickshell.execDetached(["omarchy-shell", "-q", "scratchpad-frame", "lookClear", pad])
+      var n = Object.assign({}, root.looks)
+      delete n[pad]
+      root.looks = n
+    }
     refreshTimer.restart()
     root.pads = root.pads.map(function(p) { return p.name === pad ? Object.assign({}, p, { style: name }) : p })
   }
