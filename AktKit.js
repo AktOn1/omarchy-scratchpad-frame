@@ -14,11 +14,11 @@ var LEGACY_DIRECTIONS = { top: "bottom", left: "right" }
 // How a pad appears and disappears. "slide" is Omarchy's own special workspace animation (its speed and curve);
 // the others bring their own. style is a Hyprland workspace animation style ("slide" and "slidefade" become their
 // vertical variants for the bottom side), "none" switches the animation off. speed is in Hyprland units
-// (1 = 100 ms), curve is the cubic bezier x1 y1 x2 y2 (a y above 1 overshoots), sides tells whether the side matters.
+// (1 = 100 ms), curve is the cubic bezier x1 y1 x2 y2 (a y above 1 overshoots; Hyprland refuses a y above 2 and then the whole key registration fails), sides tells whether the side matters.
 var EFFECTS = [
   { id: "slide", label: "Slide", style: "slide", sides: true },
   { id: "bounce", label: "Bounce", style: "slide", sides: true, speed: 5, curve: [0.34, 1.56, 0.64, 1] },
-  { id: "springy", label: "Springy", style: "slide", sides: true, speed: 7, curve: [0.2, 2.2, 0.4, 1] },
+  { id: "springy", label: "Springy", style: "slide", sides: true, speed: 7, curve: [0.2, 2, 0.4, 1] },
   { id: "whoosh", label: "Whoosh", style: "slide", sides: true, speed: 2, curve: [0.16, 1, 0.3, 1] },
   { id: "glide", label: "Slow glide", style: "slide", sides: true, speed: 7, curve: [0.65, 0.05, 0.36, 1] },
   { id: "slidefade", label: "Slide and fade", style: "slidefade", sides: true, speed: 4, curve: [0.23, 1, 0.32, 1] },
