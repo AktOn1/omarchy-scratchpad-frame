@@ -2497,13 +2497,16 @@ function megacity(ctx, W, H, o) {
 
 // ---- GILDED: art nouveau gold, ornaments made with ComfyUI (assets/*.png) -----
 // Image loading is per Canvas (one per monitor), so ask each Canvas itself, never a shared flag.
-function artUrl(ctx, o, name) {
+function loadedUrl(ctx, u) {
   const cv = ctx.canvas
-  if (!o.assets || !cv || !cv.isImageLoaded) return ""
-  const u = o.assets + name + (o.rev ? "?r=" + o.rev : "")   // o.rev: bumps when a picture changed, bypasses the Canvas image cache
+  if (!cv || !cv.isImageLoaded) return ""
   if (cv.isImageLoaded(u)) return u
   if (!cv.isImageLoading(u) && !cv.isImageError(u)) cv.loadImage(u)
   return ""
+}
+function artUrl(ctx, o, name) {
+  if (!o.assets) return ""
+  return loadedUrl(ctx, o.assets + name + (o.rev ? "?r=" + o.rev : ""))   // o.rev: bumps when a picture changed, bypasses the Canvas image cache
 }
 function gilded(ctx, W, H, o) {
   const p = palette(o.colors), B = BAND
@@ -2876,6 +2879,50 @@ function frost(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.FROST) }
 function sakura(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.SAKURA) }
 function cosmic(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.COSMIC) }
 
+// ---- OWNART: a plain drawn rail with ONE corner ornament made by the user's own image model (frame designer, optional step).
+// Not in PAINTERS or NAMES, so it is never offered in the picker and the AI never sees it as a style: only a recipe from the designer
+// reaches it (style "OWNART"). The recipe names the picture by a 12-digit hex id (o.ornament); the picture is a 512x512 PNG with the
+// ornament anchored top-left, stored in the user's state folder (o.ornaments is that folder's URL). A missing or bad file just means a plain rail.
+var OWN_ID = /^[0-9a-f]{12}$/
+function ownart(ctx, W, H, o) {
+  const p = palette(o.colors)
+  const K = o.follow
+    ? { rail: mix(p.dark, "#000000", 0.25), glow: p.accent, line: mix(p.accent, "#ffffff", 0.35), tint: p.accent }
+    : { rail: "#0e1218", glow: "#c9a45c", line: "#e8d9a8", tint: "" }
+  const id = typeof o.ornament === "string" && OWN_ID.test(o.ornament) && o.ornaments ? o.ornament : ""
+  const img = id ? loadedUrl(ctx, o.ornaments + id + ".png") : ""
+  if (img) {
+    // 1) the ornament first, alone on the canvas, so a source-atop fill tints only it; mirrored into the four corners
+    const S = Math.max(90, Math.min(300, Math.min(W, H) * 0.36))
+    ctx.drawImage(img, 0, 0, S, S)
+    ctx.save(); ctx.translate(W, 0); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, S, S); ctx.restore()
+    ctx.save(); ctx.translate(0, H); ctx.scale(1, -1); ctx.drawImage(img, 0, 0, S, S); ctx.restore()
+    ctx.save(); ctx.translate(W, H); ctx.scale(-1, -1); ctx.drawImage(img, 0, 0, S, S); ctx.restore()
+    if (K.tint) {
+      ctx.globalCompositeOperation = "source-atop"
+      ctx.fillStyle = rgba(K.tint, 0.45); ctx.fillRect(0, 0, W, H)
+    }
+    ctx.globalCompositeOperation = "destination-over"   // the rail goes behind the ornaments
+  }
+  band(ctx, W, H, K.rail, 6, 4, false)
+  rrPath(ctx, BAND - 1.5, BAND - 1.5, W - 2 * BAND + 3, H - 2 * BAND + 3, 4); ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(K.glow, 0.85); ctx.stroke()
+  rrPath(ctx, 3.5, 3.5, W - 7, H - 7, 5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.7); ctx.stroke()
+  ctx.fillStyle = mix(K.line, "#ffffff", 0.4)
+  const dot = function (x, y) { ctx.beginPath(); ctx.moveTo(x, y - 4.5); ctx.lineTo(x + 3, y); ctx.lineTo(x, y + 4.5); ctx.lineTo(x - 3, y); ctx.closePath(); ctx.fill() }
+  const step = 88
+  for (let x = 150 + step / 2; x < W - 150; x += step) { dot(x, 11); dot(x, H - 11) }
+  for (let y = 120 + step / 2; y < H - 120; y += step) { dot(11, y); dot(W - 11, y) }
+  ctx.globalCompositeOperation = "source-over"
+  if (o.text) {
+    setFont(ctx, o, 10, true)
+    const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
+    ctx.fillStyle = rgba(K.rail, 0.95); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
+    rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.9); ctx.stroke()
+    ctx.fillStyle = mix(K.glow, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+  }
+}
+var HIDDEN = { OWNART: ownart }
+
 var PAINTERS = { CORALREEF: coralreef,OMARCHY: omarchy, CYBERPUNK: cyberpunk, AURORA: aurora, HUD: hud, TERMINAL: terminal, GLASS: glass,
   FOLIAGE: foliage, SACRED: sacred, KAWAII: kawaii, CELESTIAL: celestial, VAPORWAVE: vaporwave,
   SAKURA: sakura, DEEPSEA: deepsea, STEAMPUNK: steampunk, FROST: frost, HALLOWEEN: halloween, COSMIC: cosmic, MEGACITY: megacity, GILDED: gilded, PASTEUP: pasteup, BLUEPRINT: blueprint,
@@ -2890,7 +2937,7 @@ function paint(ctx, W, H, o) {
   if (W < 120 || H < 120) return
   if (b) ctx.translate(b, b)
   if (o.scale) ctx.scale(o.scale, o.scale)
-  const f = PAINTERS[o.style]
+  const f = PAINTERS[o.style] || HIDDEN[o.style]
   if (f) f(ctx, W, H, o)
   else pixel(ctx, W, H, o)
 }

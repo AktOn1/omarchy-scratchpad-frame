@@ -6,10 +6,19 @@
   frame-ai use endpoint --url URL --model M [--key-env VAR | --key-file PATH]
   frame-ai use --can-see 0|1 --strong 0|1  what a Custom command / endpoint model can do
   frame-ai test [--json]                 "Test connection": a tiny real round trip with the remembered choice
-  frame-ai make "DESCRIPTION" [--json]   ask the AI for a frame recipe (style + colours); prints it, applies nothing
+  frame-ai make "DESCRIPTION" [--ornaments] [--json]
+                                         ask the AI for a frame recipe (style + colours); prints it, applies nothing.
+                                         --ornaments: also ask YOUR IMAGE MODEL for one corner ornament (only its short description is sent to it)
+  frame-ai image providers [--json]      the image-model ways (ComfyUI, OpenAI-compatible images endpoint, Custom command), the remembered pick and the ornament tick
+  frame-ai image use PROVIDER [--comfy-url U] [--checkpoint C] [--workflow FILE] [--endpoint-url U] [--model M] [--size WxH]
+                                         [--key-env VAR | --key-file PATH] [--custom CMD] [--ornaments 0|1]
+  frame-ai image checkpoints [--json]    the checkpoints your ComfyUI reports (for the dropdown)
+  frame-ai image test [--json]           "Test connection" for the image model: free, no picture is made
+  frame-ai ornaments list|prune|drop ID  the generated ornaments in the state folder (prune: remove the ones no saved look uses, keep the newest 12)
   frame-ai selftest                      offline checks (no AI call, no network)
 Which AI: the remembered pick, else Omarchy's default agent (`omarchy default agent`), else the first installed tool.
-No model is named unless you type one. See aiprov.py for the tested call of each tool.
+No model is named unless you type one. See aiprov.py (text AI) and imgprov.py (image model) for the tested call of each.
+Nothing goes to an image model unless `make --ornaments` or `image test` is run.
 """
 import json
 import os
@@ -21,6 +30,8 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import aiprov as P  # noqa: E402
 import framelib as L  # noqa: E402
 import framedesign as M  # noqa: E402
+import imgprov as I  # noqa: E402
+import ornament as O  # noqa: E402
 
 
 def out(a, obj, text):
@@ -81,15 +92,108 @@ def cmd_test(a):
 
 
 def cmd_make(a):
-    words = [x for x in a if x != "--json"]
-    r = M.make(" ".join(words))
-    out(a, r, json.dumps(r["recipe"]) if r["ok"] else "failed: " + r["error"])
+    words = [x for x in a if x not in ("--json", "--ornaments")]
+    say = (lambda m: print(json.dumps({"progress": m}), flush=True)) if "--json" in a else None
+    r = M.make(" ".join(words), images=I.choice() if "--ornaments" in a else None, progress=say)
+    out(a, r, (json.dumps(r["recipe"]) + ("\n" + r["note"] if r.get("note") else "")) if r["ok"] else "failed: " + r["error"])
     return 0 if r["ok"] else 1
+
+
+# ---- the image model (optional ornaments): same shape as the text AI above
+def cmd_image(a):
+    subs = {"providers": img_providers, "use": img_use, "checkpoints": img_checkpoints, "test": img_test}
+    if not a or a[0] not in subs:
+        print(__doc__)
+        return 2
+    try:
+        return subs[a[0]](a[1:])
+    except I.Bad as e:
+        raise L.Bad(str(e))
+
+
+def img_providers(a):
+    ch = I.choice()
+    on = bool(I.load_choice().get("ornaments"))
+    obj = {"choice": ch, "ornaments": on, "providers": I.providers(), "default_workflow": os.path.basename(I.DEFAULT_WORKFLOW)}
+    text = "\n".join("%s%-9s %s" % ("* " if p["id"] == ch["provider"] else "  ", p["id"], p["label"]) for p in obj["providers"])
+    out(a, obj, text + "\nornaments from this image model: " + ("on" if on else "off"))
+    return 0
+
+
+def img_use(a):
+    it = iter(a)
+    prov, comfy, ep, kw = None, {}, {}, {}
+    for x in it:
+        if x in ("--comfy-url", "--checkpoint", "--workflow"):
+            comfy["url" if x == "--comfy-url" else x[2:]] = next(it, "").strip()
+        elif x in ("--endpoint-url", "--model", "--size", "--key-env", "--key-file"):
+            ep["url" if x == "--endpoint-url" else x[2:].replace("-", "_")] = next(it, "").strip()
+        elif x == "--custom":
+            kw["custom"] = next(it, "").strip()
+        elif x == "--ornaments":
+            kw["ornaments"] = next(it, "") in ("1", "true", "yes", "on")
+        elif x != "--json":
+            prov = x
+    cur = I.choice()
+    if prov is not None:
+        if prov not in {p["id"] for p in I.PROVIDERS}:
+            raise L.Bad("Unknown image model way “%s”" % prov)
+        kw["provider"] = prov
+    if comfy:
+        kw["comfy"] = dict(cur["comfy"], **comfy)
+    if ep:
+        kw["endpoint"] = dict(cur["endpoint"], **ep)
+    I.save_choice(**kw)
+    ch = I.choice()
+    out(a, {"ok": True, "choice": ch, "ornaments": bool(I.load_choice().get("ornaments"))}, "image model: " + ch["provider"])
+    return 0
+
+
+def img_checkpoints(a):
+    import re
+    names = I.checkpoints(I.choice())
+    pick = next((n for n in names if not re.search(r"audio|sfx|vae|lora|controlnet|upscal|clip", n, re.I)), names[0] if names else "")
+    out(a, {"ok": True, "checkpoints": names, "suggest": pick}, "\n".join(names))
+    return 0
+
+
+def img_test(a):
+    import time
+    t0 = time.time()
+    try:
+        msg = I.test(I.choice())
+    except I.Bad as e:
+        out(a, {"ok": False, "error": str(e)}, "failed: " + str(e))
+        return 1
+    out(a, {"ok": True, "message": msg, "seconds": round(time.time() - t0, 1)}, msg)
+    return 0
+
+
+def cmd_ornaments(a):
+    sub = a[0] if a else ""
+    if sub == "list":
+        rows = O.listing()
+        used = O.referenced()
+        out(a, {"ornaments": [{"id": i, "used": i in used} for i, _ in rows]}, "\n".join("%s%s" % (i, " (used)" if i in used else "") for i, _ in rows))
+    elif sub == "prune":
+        keep, it = [], iter(a[1:])
+        for x in it:
+            if x == "--keep":
+                keep.append(next(it, ""))
+        gone = O.prune(keep)
+        out(a, {"removed": gone}, "removed %d" % len(gone))
+    elif sub == "drop" and len(a) > 1:
+        gone = O.drop(a[1])
+        out(a, {"removed": gone}, "removed" if gone else "kept")
+    else:
+        print(__doc__)
+        return 2
+    return 0
 
 
 def cmd_selftest(a):
     bad = 0
-    for f in ("aiprov_selftest.py", "framedesign_selftest.py"):
+    for f in ("aiprov_selftest.py", "imgprov_selftest.py", "ornament_selftest.py", "framedesign_selftest.py"):
         r = subprocess.run([sys.executable, os.path.join(L.HERE, f)], capture_output=True, text=True)
         print(f + ": " + (r.stdout.strip().splitlines() or ["no output"])[-1])
         if r.returncode:
@@ -101,7 +205,8 @@ def cmd_selftest(a):
 
 def main():
     a = sys.argv[1:]
-    cmds = {"providers": cmd_providers, "use": cmd_use, "test": cmd_test, "make": cmd_make, "selftest": cmd_selftest}
+    cmds = {"providers": cmd_providers, "use": cmd_use, "test": cmd_test, "make": cmd_make, "image": cmd_image, "ornaments": cmd_ornaments,
+            "selftest": cmd_selftest}
     if not a or a[0] not in cmds:
         print(__doc__)
         return 0 if not a or a[0] in ("-h", "--help", "help") else 2

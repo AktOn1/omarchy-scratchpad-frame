@@ -102,7 +102,7 @@ Scope {
   property var previewLook: null     // a frame-designer recipe being previewed on previewPad instead of a plain style
   function setBarPreview(name, pad) {
     name = String(name).toUpperCase()
-    if (styleNames.indexOf(name) < 0) return
+    if (styleNames.indexOf(name) < 0 && name !== "OWNART") return
     previewPad = pad || ""
     previewLook = null
     preview = name
@@ -184,7 +184,7 @@ Scope {
   function cleanLook(l) {
     if (!l || typeof l !== "object" || typeof l.style !== "string") return null
     const style = l.style.toUpperCase()
-    if (styleNames.indexOf(style) < 0) return null
+    if (styleNames.indexOf(style) < 0 && style !== "OWNART") return null   // OWNART: the designer's own-ornament frame, not in the picker
     const colors = {}
     if (l.colors && typeof l.colors === "object")
       for (const k of lookColorKeys) {
@@ -194,7 +194,12 @@ Scope {
         colors[k] = v.toLowerCase()
       }
     const name = typeof l.name === "string" ? l.name.replace(/[^\w .,'&-]/g, "").trim().slice(0, 40) : ""
-    return { name: name || style.charAt(0) + style.slice(1).toLowerCase(), style: style, colors: colors }
+    const out = { name: name || style.charAt(0) + style.slice(1).toLowerCase(), style: style, colors: colors }
+    if (style === "OWNART") {   // a generated ornament is named by a 12-digit hex id, never by a path
+      out.ornament = typeof l.ornament === "string" && /^[0-9a-f]{12}$/.test(l.ornament) ? l.ornament : ""
+      out.ornamentText = typeof l.ornamentText === "string" ? l.ornamentText.replace(/[^\w .,'&()\/-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 140) : ""
+    }
+    return out
   }
   function cleanLooks(o) {
     const out = {}
@@ -208,7 +213,21 @@ Scope {
   function saveLooks(next) {
     looks = next
     looksFile.setText(JSON.stringify(next) + "\n")
+    pruneDelay.restart()
   }
+  // Generated ornaments live in the state folder. Whatever no saved look uses is removed after every save (Apply, Remove, a plain style
+  // picked over a custom frame) and once after start; the one being previewed is kept. The newest 12 are the most that are ever stored.
+  readonly property string cli: Qt.resolvedUrl("bin/frame-ai").toString().replace(/^file:\/\//, "")
+  readonly property string ornamentsUrl: "file://" + Quickshell.env("HOME") + "/.local/state/scratchpad-frame/ornaments/"
+  function pruneOrnaments() {
+    if (pruneProc.running) { pruneDelay.restart(); return }
+    const keep = previewLook && previewLook.ornament ? ["--keep", previewLook.ornament] : []
+    pruneProc.command = ["python3", cli, "ornaments", "prune"].concat(keep)
+    pruneProc.running = true
+  }
+  Timer { id: pruneDelay; interval: 800; onTriggered: root.pruneOrnaments() }
+  Timer { interval: 6000; running: true; onTriggered: root.pruneOrnaments() }
+  Process { id: pruneProc }
   function parseLook(json) { try { return cleanLook(JSON.parse(json)) } catch (e) { return null } }
   // The look a pad's frame shows right now: a previewed recipe, else its saved one, unless a plain style is being previewed on it.
   function lookFor(pad) {
@@ -731,7 +750,8 @@ Scope {
           onPaint: live.painter.paint(getContext("2d"), width, height, {
             style: win.style, text: root.flash || (root.showTitle ? win.label : ""),
             colors: win.look ? Object.assign({}, root.colors, win.look.colors) : root.colors,
-            px: root.px, font: root.fontFamily, follow: root.follow || (win.look !== null && Object.keys(win.look.colors).length > 0), bleed: win.bleed, assets: Qt.resolvedUrl("assets/").toString(), rev: live.assetRev
+            px: root.px, font: root.fontFamily, follow: root.follow || (win.look !== null && Object.keys(win.look.colors).length > 0), bleed: win.bleed, assets: Qt.resolvedUrl("assets/").toString(), rev: live.assetRev,
+            ornament: win.look && win.look.ornament ? win.look.ornament : "", ornaments: root.ornamentsUrl
           })
         }
       }

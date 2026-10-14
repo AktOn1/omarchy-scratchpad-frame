@@ -103,6 +103,10 @@ The Gilded pictures are original artwork (gold ornaments generated with a local 
 
 ## What's new
 
+**1.7.0**
+
+- **Ornaments from your own image model (optional).** In the frame designer, tick **Ornaments from my own image model (less predictable)** and pick your image model (a ComfyUI address with a checkpoint list from your server, an OpenAI-compatible images endpoint, or a custom command). Then **Make frame** also asks it for one corner ornament that matches your words, and the preview and **Apply** use it in all four corners. It is off until you tick it and the box is remembered. The normal frame (a style plus colours) stays the default and is what you get if the image model fails.
+
 **1.6.0**
 
 - **Describe a frame.** In the picker, type a few words ("calm night forest, mossy green") and press **Make frame**. Your own AI picks one of the existing styles and colours it. The result previews on that scratchpad; **Apply** keeps it, **Discard** puts the old look back. Works without "Follow Omarchy theme colors".
@@ -225,7 +229,20 @@ Open the picker for a scratchpad (bar icon, click the scratchpad). At the top is
 
 **Privacy: what is sent where.** Nothing is sent until you press **Make frame** or **Test connection**. Then the AI gets two things: the text you typed, and the list of style names with a one-line description each (plus the allowed colour names). No picture, no screenshot, no window title, no theme colours, no file names. It goes to the one tool you chose, which sends it to that tool's own service under its own terms: Claude Code to Anthropic, Codex to OpenAI, Gemini CLI to Google, OpenCode to whichever provider you configured in it, Ollama stays on your computer, an OpenAI-compatible endpoint receives it at the address you typed, a custom command goes wherever you point it. Without these buttons the plugin sends nothing and stays offline.
 
-From a terminal: `bin/frame-ai providers`, `bin/frame-ai use claude`, `bin/frame-ai make "warm sunset, copper"` (prints the recipe, applies nothing), `bin/frame-ai selftest` (offline checks, no AI call).
+### Ornaments from your own image model (less predictable)
+
+Under the description box is a tick-box, **Ornaments from my own image model (less predictable)**, and a button **Image model: ...**. It is off until you tick it, and the tick is remembered. When it is on, **Make frame** does one more thing: your text AI also writes a short ornament description (for example "curling fern fronds and tiny moss flowers"), your image model draws it, and the frame uses the picture as a corner ornament, mirrored into the four corners and tinted with the recipe's accent colour. The result will not look like the shipped art and can be odd or ugly; you still see it first and choose **Apply** or **Discard**.
+
+- **Image model.** Pick one: **ComfyUI** (type its address, for example `http://127.0.0.1:8188`; the **Checkpoint** list is filled from your server; an optional workflow file in API format replaces the plain built-in text-to-image one), an **OpenAI-compatible images endpoint** (address, model name, key from an environment variable or a private file, like the text AI), or a **custom command** (started directly, not through a shell; `{prompt}` `{out}` `{width}` `{height}` `{seed}` are replaced). Your pick is remembered in `~/.local/state/scratchpad-frame/img.json` (never a key).
+- **Test connection** (next to the picker) checks that the server answers and lists its checkpoints. It makes no picture.
+- If the image model is off, busy or gives a useless picture, you still get the normal frame (a style plus colours) and a plain-words note saying what went wrong.
+- Cutting the ornament out of its background uses the Python Pillow library when it is installed, else ImageMagick (`magick`, which Omarchy ships). With neither, you get the normal frame and a note saying so.
+- The picture is checked (it must really be an image, it is cut out, cropped and made a fixed 512 x 512 PNG) and stored in `~/.local/state/scratchpad-frame/ornaments/<id>.png`. A recipe names it only by a 12-digit id, never by a path. At most 12 are kept (the oldest go first); **Discard**, **Remove** and picking another style delete the ornament that is no longer used, so nothing is left behind.
+- Recipes stay data only: no code from the AI or the image model is ever run.
+
+**What goes where when the box is ticked.** Everything in the privacy paragraph above still holds for the text AI. In addition, only when you press **Make frame** with the box ticked, the **ornament description** (a few words the text AI wrote, shown to you in the message under the box) goes to the image model you picked, inside a short fixed drawing instruction. Your own description, window titles, pictures, file names, the style list and the theme colours are not sent to the image model. If you pick a model on the internet (an endpoint over `https://`), that service receives the ornament description under its own terms; ComfyUI and a custom command receive it wherever you point them. **Test connection** sends no prompt (it only asks the server for its list). With the box off, nothing goes to any image model.
+
+From a terminal: `bin/frame-ai image providers`, `bin/frame-ai image use comfyui --comfy-url http://127.0.0.1:8188 --checkpoint NAME --ornaments 1`, `bin/frame-ai image test`, `bin/frame-ai make "warm sunset, copper" --ornaments`, `bin/frame-ai ornaments list`, `bin/frame-ai providers`, `bin/frame-ai use claude`, `bin/frame-ai make "warm sunset, copper"` (prints the recipe, applies nothing), `bin/frame-ai selftest` (offline checks, no AI call).
 
 ## What it touches
 
@@ -234,7 +251,8 @@ From a terminal: `bin/frame-ai providers`, `bin/frame-ai use claude`, `bin/frame
 - Runs `hyprctl eval` to widen `gaps_out` on `special:scratchpad` to 26 px so the frame sits in the gap, re-applies it when Hyprland reloads its config, and sets it back to your global `general:gaps_out` when the plugin is disabled or removed. It never edits your Hyprland config files.
 - The bar widget runs `omarchy-shell scratchpad-frame ...` commands only; it reads the same style state file and `colors.toml`, and writes nothing of its own.
 - Runs `hyprctl monitors -j` and `hyprctl getoption general:gaps_out -j` (read only).
-- Frame designer: when you press **Make frame** or **Test connection** it runs `bin/frame-ai` (Python 3), which runs the AI tool you chose (or calls the endpoint you typed). It keeps `ai.json` (your AI pick; never a key) and `looks.json` (applied recipes) in `~/.local/state/scratchpad-frame/`. See the privacy paragraph above.
+- Frame designer: when you press **Make frame** or **Test connection** it runs `bin/frame-ai` (Python 3), which runs the AI tool you chose (or calls the endpoint you typed). It keeps `ai.json` (your AI pick; never a key) and `looks.json` (applied recipes) in `~/.local/state/scratchpad-frame/`. See the privacy paragraphs above.
+- Ornaments (only with the tick-box on): **Make frame** also calls your image model (`bin/imgprov.py`: a request to the ComfyUI or endpoint address you typed, or your custom command), uses Pillow (or ImageMagick) to cut out the picture, and keeps it in `~/.local/state/scratchpad-frame/ornaments/` with `img.json` (your image-model pick; never a key) next to it. The shell reads those pictures from that folder by a 12-digit id and deletes the unused ones.
 
 Requires a Hyprland with Lua config support (`hyprctl eval`), as shipped with current Omarchy.
 
@@ -278,6 +296,8 @@ QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen qml6 tests/render.qml -- /tm
 ```bash
 omarchy plugin remove <plugin-id>
 ```
+
+Your own data stays in `~/.local/state/scratchpad-frame/` (`looks.json`, `ai.json`, `img.json`, `ornaments/`). Delete that folder if you want it gone.
 
 ## License
 

@@ -7,6 +7,8 @@ import qs.Ui
 // "Describe the frame you want": one text box. The user's own AI answers with a recipe (an existing style plus colours),
 // it is previewed on the scratchpad, and the user applies or discards it. A recipe is data only; nothing the AI says is run.
 // Nothing is sent until the Make button (or Enter in the box) is used. bin/frame-ai does the talking and checks the answer.
+// Optional, off by default: "Ornaments from my own image model (less predictable)". When ticked, Make frame also asks the user's own
+// image model for one corner ornament; only a short ornament description goes to it. If that fails the normal frame is still made.
 Column {
   id: fm
 
@@ -31,6 +33,22 @@ Column {
   property bool provStrong: true
   property string testMsg: ""
   property bool testBad: false
+
+  // the optional image model (ornaments)
+  property bool imgOn: false
+  property bool imgOpen: false
+  property var imgRows: []
+  property string imgId: "comfyui"
+  property var imgComfy: ({ url: "", workflow: "", checkpoint: "" })
+  property var imgEndpoint: ({ url: "", model: "", key_env: "", key_file: "", size: "" })
+  property var ckptList: []
+  property string ckptMsg: ""
+  property string imgTestMsg: ""
+  property bool imgTestBad: false
+  readonly property bool imgShown: imgOn || imgOpen
+  readonly property var imgOptions: imgRows.map(function(r) { return { value: r.id, label: r.label } })
+  readonly property var ckptOptions: ckptList.map(function(c) { return { value: c, label: c.replace(/\.(safetensors|ckpt|pt)$/, "") } })
+  readonly property string imgLabel: { for (var i = 0; i < imgRows.length; i++) if (imgRows[i].id === imgId) return imgRows[i].label.replace(/ \(.*$/, "").replace(/…$/, ""); return "ComfyUI" }
 
   readonly property var lookNow: host.looks[padId] || null
   readonly property var provRow: rowOf(provId)
@@ -92,26 +110,36 @@ Column {
     if (busy) return
     var t = descField.text.trim()
     if (t === "") { say("Describe the frame you want first.", true); return }
+    discardPending()
     recipe = null
+    makeResult = null
     host.cmd(["previewEnd"])
     busy = true
     say("Asking " + provLabel + "…", false)
-    makeProc.command = ["python3", cli, "make", t, "--json"]
+    makeProc.command = ["python3", cli, "make", t, "--json"].concat(imgOn ? ["--ornaments"] : [])
     makeProc.running = true
   }
   function cancel() { if (makeProc.running) makeProc.running = false; busy = false; say("Cancelled. Nothing was changed.", false) }
+  property var makeResult: null
   Process {
     id: makeProc
-    stdout: StdioCollector { id: makeOut; waitForEnd: true }
+    // one JSON line per step: {"progress": "ai"|"image"} while it works, then the answer
+    stdout: SplitParser {
+      onRead: function(line) {
+        var d = null
+        try { d = JSON.parse(line) } catch (e) { return }
+        if (d && d.progress === "image") fm.say("Asking your image model (" + fm.imgLabel + ") for an ornament. This can take a minute…", false)
+        else if (d && d.ok !== undefined) fm.makeResult = d
+      }
+    }
     onExited: function(code, status) {
       if (!fm.busy) return
       fm.busy = false
-      var d = null
-      try { d = JSON.parse(String(makeOut.text).trim().split("\n").pop()) } catch (e) { d = null }
+      var d = fm.makeResult
       if (d && d.ok && d.recipe) {
         fm.recipe = d.recipe
         fm.showRecipe()
-        fm.say("Ready: previewing “" + d.recipe.name + "” on the scratchpad. Apply it or discard it.", false)
+        fm.say("Ready: previewing “" + d.recipe.name + "” on the scratchpad. Apply it or discard it." + (d.recipe.ornament && d.recipe.ornamentText ? " Ornament made from: " + d.recipe.ornamentText + "." : "") + (d.note ? " " + d.note : ""), false)
       } else {
         fm.say(d && d.error ? d.error : "The frame designer gave no answer.", true)
       }
@@ -127,9 +155,18 @@ Column {
   }
   function discard() {
     host.cmd(["previewEnd"])
+    discardPending()
     recipe = null
     say("Discarded. Nothing was changed.", false)
   }
+  // a made-but-not-applied ornament is deleted right away (the saved ones are never touched: bin/frame-ai ornaments drop refuses those)
+  function discardPending() {
+    if (recipe && recipe.ornament && !dropProc.running) {
+      dropProc.command = ["python3", cli, "ornaments", "drop", recipe.ornament]
+      dropProc.running = true
+    }
+  }
+  Process { id: dropProc }
   function removeLook() {
     host.cmd(["lookClear", padId])
     var n = Object.assign({}, host.looks)
@@ -166,6 +203,162 @@ Column {
     font.pixelSize: Style.font.body * 0.95
   }
 
+  // ------------------------------------------------------------ optional: ornaments from the user's own image model
+  Row {
+    width: fm.width
+    spacing: Style.space(6)
+    Btn {
+      toggle: true
+      checked: fm.imgOn
+      label: (fm.imgOn ? "󰄲 " : "󰄱 ") + "Ornaments from my own image model (less predictable)"
+      onClicked: fm.setOrnaments(!fm.imgOn)
+    }
+    Btn { toggle: true; checked: fm.imgOpen; label: "Image model: " + fm.imgLabel; onClicked: fm.imgOpen = !fm.imgOpen }
+  }
+  Text {
+    visible: fm.imgOn
+    width: fm.width
+    leftPadding: Style.space(4)
+    wrapMode: Text.WordWrap
+    textFormat: Text.PlainText
+    text: "On: Make frame also asks your image model for one corner ornament that matches your words. It will not look like the shipped art, and it can be odd or ugly. If it fails you still get the normal frame (a style plus colours)."
+    color: fm.fg
+    opacity: 0.7
+    font.family: fm.font
+    font.pixelSize: Style.font.body * 0.9
+  }
+  Column {
+    visible: fm.imgShown
+    width: fm.width
+    spacing: Style.space(6)
+
+    Text {
+      width: fm.width
+      wrapMode: Text.WordWrap
+      textFormat: Text.PlainText
+      text: "Only a short ornament description goes to the image model you pick here, and only when Make frame is pressed with the box ticked. No window titles, pictures or theme colours are sent. The made picture is stored on this computer and checked before it is used."
+      color: fm.fg
+      opacity: 0.65
+      font.family: fm.font
+      font.pixelSize: Style.font.body * 0.9
+    }
+    Row {
+      spacing: Style.space(8)
+      Column {
+        spacing: Style.space(2)
+        Text { textFormat: Text.PlainText; text: "Image model"; opacity: 0.7; color: fm.fg; font.family: fm.font; font.pixelSize: Style.font.caption }
+        Dropdown {
+          showLabel: false
+          width: Style.space(250)
+          foreground: fm.fg
+          fontFamily: fm.font
+          options: fm.imgOptions
+          value: fm.imgId
+          onChanged: function(v) { fm.pickImgProvider(v) }
+        }
+      }
+      Column {
+        visible: fm.imgId === "comfyui" && fm.ckptOptions.length > 0
+        spacing: Style.space(2)
+        Text { textFormat: Text.PlainText; text: "Checkpoint (from your ComfyUI)"; opacity: 0.7; color: fm.fg; font.family: fm.font; font.pixelSize: Style.font.caption }
+        Dropdown {
+          showLabel: false
+          width: Style.space(300)
+          foreground: fm.fg
+          fontFamily: fm.font
+          options: fm.ckptOptions
+          value: fm.imgComfy.checkpoint
+          onChanged: function(v) { fm.runImgUse(["--checkpoint", v]) }
+        }
+      }
+      Column {
+        spacing: Style.space(2)
+        Text { textFormat: Text.PlainText; text: " "; font.pixelSize: Style.font.caption }
+        Btn { label: "Test connection"; onClicked: fm.testImage() }
+      }
+    }
+    Column {
+      visible: fm.imgId === "comfyui"
+      width: fm.width
+      spacing: Style.space(6)
+      Field {
+        id: comfyUrlField
+        placeholderText: "ComfyUI address, e.g. http://127.0.0.1:8188"
+        maximumLength: 200
+        onEditingFinished: { if (text.trim() !== fm.imgComfy.url) fm.runImgUse(["--comfy-url", text.trim()]); fm.loadCheckpoints() }
+      }
+      Field {
+        id: comfyFlowField
+        placeholderText: "Workflow file in API format (optional; empty = the plain built-in text-to-image one)"
+        maximumLength: 300
+        onEditingFinished: if (text.trim() !== fm.imgComfy.workflow) fm.runImgUse(["--workflow", text.trim()])
+      }
+      Text {
+        visible: fm.ckptMsg !== ""
+        width: fm.width
+        wrapMode: Text.WordWrap
+        textFormat: Text.PlainText
+        text: fm.ckptMsg
+        color: fm.fg
+        opacity: 0.8
+        font.family: fm.font
+        font.pixelSize: Style.font.body * 0.9
+      }
+    }
+    Column {
+      visible: fm.imgId === "endpoint"
+      width: fm.width
+      spacing: Style.space(6)
+      Field {
+        id: imgEpUrlField
+        placeholderText: "Server address of an OpenAI-compatible images endpoint, e.g. http://localhost:8080/v1"
+        maximumLength: 200
+        onEditingFinished: fm.saveImgEndpoint()
+      }
+      Field {
+        id: imgEpModelField
+        placeholderText: "Model name the server expects"
+        maximumLength: 80
+        onEditingFinished: fm.saveImgEndpoint()
+      }
+      Row {
+        spacing: Style.space(8)
+        Field {
+          id: imgEpKeyEnvField
+          width: (fm.width - Style.space(8)) / 2
+          placeholderText: "Key from this environment variable (name only)"
+          maximumLength: 60
+          onEditingFinished: fm.saveImgEndpoint()
+        }
+        Field {
+          id: imgEpKeyFileField
+          width: (fm.width - Style.space(8)) / 2
+          placeholderText: "or from a private file (chmod 600), e.g. ~/.config/my-image-key"
+          maximumLength: 200
+          onEditingFinished: fm.saveImgEndpoint()
+        }
+      }
+    }
+    Field {
+      id: imgCustomField
+      visible: fm.imgId === "custom"
+      placeholderText: "Custom command, no shell: e.g. my-image-tool --prompt {prompt} --out {out}   (also {width} {height} {seed})"
+      maximumLength: 300
+      onAccepted: { fm.saveImgCustom(); fm.parent.forceActiveFocus() }
+      onEditingFinished: fm.saveImgCustom()
+    }
+    Text {
+      visible: fm.imgTestMsg !== ""
+      width: fm.width
+      wrapMode: Text.WordWrap
+      textFormat: Text.PlainText
+      text: fm.imgTestMsg
+      color: fm.imgTestBad ? "#ff8a80" : fm.fg
+      font.family: fm.font
+      font.pixelSize: Style.font.body * 0.95
+    }
+  }
+
   // the answer, waiting for Apply or Discard
   Row {
     visible: fm.recipe !== null
@@ -174,7 +367,7 @@ Column {
     Text {
       anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
-      text: fm.recipe ? fm.recipe.name + " · " + fm.host.menu.pretty(fm.recipe.style) : ""
+      text: fm.recipe ? fm.recipe.name + " · " + (fm.recipe.style === "OWNART" ? "your own ornament" : fm.host.menu.pretty(fm.recipe.style)) : ""
       color: fm.fg
       font.family: fm.font
       font.pixelSize: Style.font.body
@@ -329,7 +522,6 @@ Column {
 
   // ------------------------------------------------------------ remembering the pick (bin/frame-ai use)
   function loadProviders() { if (!provProc.running) provProc.running = true }
-  Component.onCompleted: loadProviders()
   Process {
     id: provProc
     command: ["python3", fm.cli, "providers", "--json"]
@@ -395,6 +587,98 @@ Column {
       try { d = JSON.parse(String(testOut.text).trim().split("\n").pop()) } catch (e) { d = null }
       fm.testBad = !(d && d.ok)
       fm.testMsg = d ? (d.ok ? "Connection works (" + d.seconds + " s)." : "Test failed: " + (d.error || "no answer")) : "Test failed: no answer."
+    }
+  }
+
+  // ------------------------------------------------------------ remembering the image-model pick (bin/frame-ai image ...)
+  function loadImg() { if (!imgProc.running) imgProc.running = true }
+  function loadCheckpoints() { if (imgShown && imgId === "comfyui" && !ckptProc.running) ckptProc.running = true }
+  onImgShownChanged: { if (imgShown) loadCheckpoints() }
+  Component.onCompleted: { loadProviders(); loadImg() }
+  Process {
+    id: imgProc
+    command: ["python3", fm.cli, "image", "providers", "--json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(String(text).trim())
+          fm.imgRows = d.providers
+          fm.imgOn = !!d.ornaments
+          var was = fm.imgId
+          fm.imgId = d.choice.provider
+          fm.imgComfy = d.choice.comfy
+          fm.imgEndpoint = d.choice.endpoint
+          if (!comfyUrlField.activeFocus) comfyUrlField.text = fm.imgComfy.url
+          if (!comfyFlowField.activeFocus) comfyFlowField.text = fm.imgComfy.workflow
+          if (!imgEpUrlField.activeFocus) imgEpUrlField.text = fm.imgEndpoint.url
+          if (!imgEpModelField.activeFocus) imgEpModelField.text = fm.imgEndpoint.model
+          if (!imgEpKeyEnvField.activeFocus) imgEpKeyEnvField.text = fm.imgEndpoint.key_env
+          if (!imgEpKeyFileField.activeFocus) imgEpKeyFileField.text = fm.imgEndpoint.key_file
+          if (d.choice.custom && imgCustomField.text === "") imgCustomField.text = d.choice.custom
+          if (was !== fm.imgId || fm.ckptList.length === 0) fm.loadCheckpoints()
+        } catch (e) { fm.say("Could not read the image model settings.", true) }
+      }
+    }
+  }
+  Process {
+    id: ckptProc
+    command: ["python3", fm.cli, "image", "checkpoints", "--json"]
+    stdout: StdioCollector { id: ckptOut; waitForEnd: true }
+    onExited: {
+      var d = null
+      try { d = JSON.parse(String(ckptOut.text).trim().split("\n").pop()) } catch (e) { d = null }
+      if (d && d.ok) {
+        fm.ckptList = d.checkpoints
+        fm.ckptMsg = d.checkpoints.length === 0 ? "ComfyUI answers but has no checkpoints." : ""
+        if (d.checkpoints.length > 0 && d.checkpoints.indexOf(fm.imgComfy.checkpoint) < 0) fm.runImgUse(["--checkpoint", d.suggest])
+      } else {
+        fm.ckptList = []
+        fm.ckptMsg = "Could not list checkpoints: " + (d && d.error ? d.error : "no answer") + " Start ComfyUI, or fix the address, then press Test connection."
+      }
+    }
+  }
+
+  property var imgQueue: []
+  function runImgUse(args) { imgQueue.push(args); pumpImg() }
+  function pumpImg() {
+    if (imgUseProc.running || imgQueue.length === 0) return
+    imgUseProc.command = ["python3", cli, "image", "use"].concat(imgQueue.shift()).concat(["--json"])
+    imgUseProc.running = true
+  }
+  Process {
+    id: imgUseProc
+    stdout: StdioCollector { waitForEnd: true }
+    onExited: { if (fm.imgQueue.length > 0) fm.pumpImg(); else fm.loadImg() }
+  }
+  function setOrnaments(on) { imgOn = on; imgTestMsg = ""; runImgUse(["--ornaments", on ? "1" : "0"]) }
+  function pickImgProvider(id) {
+    imgTestMsg = ""
+    imgId = id
+    var a = [id]
+    if (id === "custom" && imgCustomField.text.trim() !== "") { a.push("--custom"); a.push(imgCustomField.text.trim()) }
+    runImgUse(a)
+  }
+  function saveImgEndpoint() {
+    runImgUse(["endpoint", "--endpoint-url", imgEpUrlField.text.trim(), "--model", imgEpModelField.text.trim(),
+               "--key-env", imgEpKeyEnvField.text.trim(), "--key-file", imgEpKeyFileField.text.trim()])
+  }
+  function saveImgCustom() { if (imgCustomField.text.trim() !== "") runImgUse(["custom", "--custom", imgCustomField.text.trim()]) }
+  function testImage() {
+    if (imgTestProc.running) return
+    imgTestMsg = "Testing the connection…"; imgTestBad = false
+    imgTestProc.running = true
+  }
+  Process {
+    id: imgTestProc
+    command: ["python3", fm.cli, "image", "test", "--json"]
+    stdout: StdioCollector { id: imgTestOut; waitForEnd: true }
+    onExited: {
+      var d = null
+      try { d = JSON.parse(String(imgTestOut.text).trim().split("\n").pop()) } catch (e) { d = null }
+      fm.imgTestBad = !(d && d.ok)
+      fm.imgTestMsg = d ? (d.ok ? "Connection works: " + d.message : "Test failed: " + (d.error || "no answer")) : "Test failed: no answer."
+      if (d && d.ok) fm.loadCheckpoints()
     }
   }
 }

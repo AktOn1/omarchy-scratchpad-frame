@@ -1,6 +1,7 @@
 // Offscreen preview renderer. Usage:
 //   QT_QPA_PLATFORM=offscreen qml6 tests/render.qml -- OUTDIR STYLE[,STYLE...] [theme.toml] [follow]
 // "follow" as last argument recolours the style from the theme. Paint times go to the console.
+// Own ornament (style OWNART): add  own=/path/to/ornaments/ID  (the folder that holds ID.png, then /ID) as an argument.
 // Writes OUTDIR/STYLE.png: a 1920x1080 fake desktop with a window inset 26 px and the frame drawn on top.
 import QtQuick
 import QtQuick.Window
@@ -16,6 +17,7 @@ Window {
   property bool follow: args.indexOf("follow") > 0
   property string themeFile: args.length > sep + 3 && args[sep + 3] !== "follow" && args[sep + 3] !== "fit" ? args[sep + 3] : ""
   property var colors: ({})
+  property string own: { for (const a of args) if (a.indexOf("own=") === 0) return a.slice(4); return "" }
   property bool fitted: args.indexOf("fit") > 0   // "fit" as an argument: small window, frame hugs it and may use the outer contour
   property int idx: 0
   property int bleed: fitted ? Painter.bleedFor(styles[idx]) : 0
@@ -56,7 +58,8 @@ Window {
       const ctx = getContext("2d")
       const t0 = Date.now()
       Painter.paint(ctx, width, height, { bleed: win.bleed, style: win.styles[win.idx], text: "SCRATCHPAD",
-        colors: win.colors, px: 3, font: "monospace", follow: win.follow, assets: Qt.resolvedUrl("../assets/").toString() })
+        colors: win.colors, px: 3, font: "monospace", follow: win.follow,
+        ornament: win.own ? win.own.slice(win.own.lastIndexOf("/") + 1) : "", ornaments: win.own ? "file://" + win.own.slice(0, win.own.lastIndexOf("/") + 1) : "", assets: Qt.resolvedUrl("../assets/").toString() })
       console.log("paint " + win.styles[win.idx] + " " + (Date.now() - t0) + " ms")
     }
   }

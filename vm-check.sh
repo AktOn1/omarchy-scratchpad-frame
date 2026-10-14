@@ -58,6 +58,53 @@ if [ $E = scratchpad-frame ]; then
   ipc scratchpad-frame.bar pick "$P" >/dev/null; sleep 3
   [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/picker-designer.png" 2>/dev/null
   ipc scratchpad-frame.bar close >/dev/null
+  # Ornaments from the user's own image model: a stand-in server plays both the text AI and the image model (nothing real is called)
+  if command -v python3 >/dev/null && [ -f "$PLUGIN_DIR/tests/standin.py" ]; then
+    FA="python3 $PLUGIN_DIR/bin/frame-ai"; SEEN=/tmp/standin-seen.jsonl; PORT=18199; ST=~/.local/state/scratchpad-frame
+    rm -f $SEEN; setsid nohup python3 "$PLUGIN_DIR/tests/standin.py" $PORT --seen $SEEN >/dev/null 2>&1 </dev/null & echo $! >/tmp/standin.pid
+    n=0; until curl -s -o /dev/null http://127.0.0.1:$PORT/object_info/CheckpointLoaderSimple || [ $n -ge 10 ]; do sleep 1; n=$((n+1)); done
+    if python3 -c "import PIL" 2>/dev/null; then ok "ornaments: picture engine: Pillow"; elif command -v magick >/dev/null; then ok "ornaments: picture engine: ImageMagick (Pillow not installed)"; else bad "ornaments: neither Pillow nor ImageMagick found"; fi
+    [ "$($FA image providers --json | jq -r .ornaments)" = false ] && ok "ornaments: box is off by default" || bad "ornaments: box not off by default"
+    ipc $E.panel open >/dev/null; sleep 2; ipc $E.cards show edit scratchpad-frame scratchpad >/dev/null; sleep 3
+    [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/picker-designer-ornaments-off.png" 2>/dev/null
+    ipc $E.panel close >/dev/null
+    $FA image use comfyui --comfy-url http://127.0.0.1:$PORT --checkpoint standin-model.safetensors --json >/dev/null
+    $FA use endpoint --url http://127.0.0.1:$PORT/v1 --json >/dev/null; $FA use --model m --json >/dev/null
+    r=$($FA image test --json); jq -e '.ok and (.message|test("1 checkpoint"))' <<<"$r" >/dev/null && ok "ornaments: Test connection against the stand-in image server" || bad "image test: $r"
+    r=$($FA image checkpoints --json); jq -e '.checkpoints==["standin-model.safetensors"]' <<<"$r" >/dev/null && ok "ornaments: checkpoint list from the server" || bad "image checkpoints: $r"
+    [ ! -s $SEEN ] && ok "ornaments: nothing sent before Make frame" || bad "something was sent before Make frame: $(head -c 200 $SEEN)"
+    $FA image use --ornaments 1 --json >/dev/null
+    ipc $E.panel open >/dev/null; sleep 2; ipc $E.cards show edit scratchpad-frame scratchpad >/dev/null; sleep 3
+    [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/picker-designer-ornaments-on.png" 2>/dev/null
+    ipc $E.panel close >/dev/null
+    r=$($FA make "calm night forest in mossy greens" --ornaments --json | tail -1)
+    O=$(jq -r '.recipe.ornament // empty' <<<"$r")
+    jq -e '.ok and .recipe.style=="OWNART" and (.recipe.ornament|test("^[0-9a-f]{12}$"))' <<<"$r" >/dev/null && ok "ornaments: Make frame (ticked) made an ornament" || bad "make --ornaments: ${r:0:300}"
+    [ -n "$O" ] && [ -s "$ST/ornaments/$O.png" ] && ok "ornaments: stored in the state folder by id" || bad "ornament file missing"
+    jq -r 'select(.path=="/prompt")|.body|tostring' $SEEN | grep -q "fern fronds" && ! jq -r 'select(.path=="/prompt")|.body|tostring' $SEEN | grep -qi "calm night forest" && ok "ornaments: image model got only the ornament description" || bad "image model request has the wrong content"
+    R2=$(jq -c '.recipe' <<<"$r")
+    r=$(ipc scratchpad-frame previewLook "$P" "$R2"); [ "$r" = ok ] && ok "ornaments: preview" || bad "previewLook ornament: $r"
+    sleep 2; [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/ornament-preview.png" 2>/dev/null
+    r=$(ipc scratchpad-frame previewLook "$P" '{"style":"OWNART","ornament":"../../etc/passwd"}'); case $r in ok*) ipc scratchpad-frame state | grep -q passwd && bad "a path was kept as an ornament" || ok "ornaments: a path is never used as an ornament id";; *) ok "ornaments: a path as an ornament id is rejected";; esac
+    ipc scratchpad-frame previewEnd >/dev/null
+    r=$(ipc scratchpad-frame lookSet "$P" "$R2"); [ "$r" = ok ] && ok "ornaments: Apply" || bad "lookSet ornament: $r"
+    sleep 3; [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/ornament-applied.png" 2>/dev/null
+    (foot -e sleep 30 >/dev/null 2>&1 &) ; sleep 1
+    hyprctl eval "__akton1_scratchpad_frame.toggle('scratchpad','bottom')" >/dev/null; sleep 4
+    [ -n "$VM_TEST_OUT" ] && grim "$VM_TEST_OUT/ornament-applied-pad-open.png" 2>/dev/null
+    hyprctl eval "__akton1_scratchpad_frame.toggle('scratchpad','bottom')" >/dev/null; sleep 1; pkill -x foot
+    jq -e --arg p "$P" --arg o "$O" '.[$p].ornament==$o' $ST/looks.json >/dev/null 2>&1 && [ -s "$ST/ornaments/$O.png" ] && ok "ornaments: applied look keeps its ornament" || bad "applied ornament missing"
+    r=$(ipc scratchpad-frame lookClear "$P"); [ "$r" = ok ] && ok "ornaments: Remove" || bad "lookClear ornament: $r"
+    n=0; until [ ! -e "$ST/ornaments/$O.png" ] || [ $n -ge 10 ]; do sleep 1; n=$((n+1)); done
+    [ ! -e "$ST/ornaments/$O.png" ] && ok "ornaments: Remove left no orphan file" || bad "orphan ornament left: $(ls $ST/ornaments)"
+    r=$($FA make "calm night forest" --ornaments --json | tail -1); O2=$(jq -r '.recipe.ornament // empty' <<<"$r")
+    $FA ornaments drop "$O2" --json >/dev/null; [ -n "$O2" ] && [ ! -e "$ST/ornaments/$O2.png" ] && ok "ornaments: Discard deletes the unsaved ornament" || bad "discarded ornament still there"
+    $FA image use comfyui --comfy-url http://127.0.0.1:9 --json >/dev/null
+    r=$($FA make "calm night forest" --ornaments --json | tail -1)
+    jq -e '.ok and .recipe.style=="FOLIAGE" and (.note|test("normal frame"))' <<<"$r" >/dev/null && ok "ornaments: image model down gives the normal frame and a plain note" || bad "fallback: ${r:0:200}"
+    kill "$(cat /tmp/standin.pid)" 2>/dev/null
+    $FA image use --ornaments 0 --json >/dev/null
+  fi
   if command -v python3 >/dev/null; then
     out=$(python3 "$PLUGIN_DIR/bin/frame-ai" selftest 2>&1); case $out in *"selftest: PASS"*) ok "frame designer: offline self-test";; *) bad "frame-ai selftest: ${out: -200}";; esac
   fi
