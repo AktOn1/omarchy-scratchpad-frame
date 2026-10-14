@@ -92,7 +92,7 @@ def process(raw, engine=None):
         return _process_pillow(raw)
     if engine == "magick" and _magick():
         return _process_magick(raw)
-    raise L.Bad("Making ornaments needs the Python Pillow library (Arch: pacman -S python-pillow) or ImageMagick.")
+    raise L.Bad("Making ornaments needs the Python Pillow library or ImageMagick installed on this system.")
 
 
 def _process_pillow(raw):
@@ -362,7 +362,7 @@ def generate(orn_text, ch, timeout=None):
     if not orn:
         raise L.Bad("There was no ornament description.")
     if not (_pil() or _magick()):
-        raise L.Bad("Making ornaments needs the Python Pillow library (Arch: pacman -S python-pillow) or ImageMagick.")
+        raise L.Bad("Making ornaments needs the Python Pillow library or ImageMagick installed on this system.")
     try:
         raw, _mime = I.generate(ch, image_prompt(orn), NEGATIVE, RAW_SIDE, RAW_SIDE, timeout=timeout)
     except I.Bad as e:

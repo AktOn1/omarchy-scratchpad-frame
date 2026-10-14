@@ -62,7 +62,7 @@ if [ $E = scratchpad-frame ]; then
   if command -v python3 >/dev/null && [ -f "$PLUGIN_DIR/tests/standin.py" ]; then
     FA="python3 $PLUGIN_DIR/bin/frame-ai"; SEEN=/tmp/standin-seen.jsonl; PORT=18199; ST=~/.local/state/scratchpad-frame
     rm -f $SEEN; setsid nohup python3 "$PLUGIN_DIR/tests/standin.py" $PORT --seen $SEEN >/dev/null 2>&1 </dev/null & echo $! >/tmp/standin.pid
-    n=0; until curl -s -o /dev/null http://127.0.0.1:$PORT/object_info/CheckpointLoaderSimple || [ $n -ge 10 ]; do sleep 1; n=$((n+1)); done
+    n=0; until (exec 3<>/dev/tcp/127.0.0.1/$PORT) 2>/dev/null || [ $n -ge 10 ]; do sleep 1; n=$((n+1)); done
     if python3 -c "import PIL" 2>/dev/null; then ok "ornaments: picture engine: Pillow"; elif command -v magick >/dev/null; then ok "ornaments: picture engine: ImageMagick (Pillow not installed)"; else bad "ornaments: neither Pillow nor ImageMagick found"; fi
     [ "$($FA image providers --json | jq -r .ornaments)" = false ] && ok "ornaments: box is off by default" || bad "ornaments: box not off by default"
     ipc $E.panel open >/dev/null; sleep 2; ipc $E.cards show edit scratchpad-frame scratchpad >/dev/null; sleep 3
