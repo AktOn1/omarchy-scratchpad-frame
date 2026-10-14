@@ -160,7 +160,7 @@ Column {
             function onFollowChanged() { thumbCanvas.requestPaint() }
             function onThemeColorsChanged() { thumbCanvas.requestPaint() }
             function onPainterChanged() { thumbCanvas.requestPaint() }
-            function onAssetRevChanged() { thumbCanvas.requestPaint() }
+            function onAssetRevChanged() { host.painter.preload(thumbCanvas, Qt.resolvedUrl("assets/").toString(), host.assetRev); thumbCanvas.requestPaint() }
           }
           onPaint: host.painter.paint(getContext("2d"), 1920, 1080, {
             style: pick.shownStyle, text: "", colors: pick.host.themeColors, px: 3,
@@ -168,7 +168,7 @@ Column {
             assets: Qt.resolvedUrl("assets/").toString(), rev: host.assetRev
           })
           onImageLoaded: requestPaint()
-          Component.onCompleted: requestPaint()
+          Component.onCompleted: { host.painter.preload(thumbCanvas, Qt.resolvedUrl("assets/").toString(), host.assetRev); requestPaint() }
           Timer {
             interval: 400
             repeat: true

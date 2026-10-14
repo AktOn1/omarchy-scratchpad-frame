@@ -38,6 +38,8 @@ Scope {
   // One entry per framed special workspace: special:<name>, slides in from <direction>, own <style> or "" for the shared one.
   readonly property var defaultPads: [{ name: "scratchpad", label: "SCRATCHPAD", direction: "bottom", style: "" }]
   property var pads: defaultPads
+  readonly property int fsInset: 12     // fullscreen: the frame is drawn this far past the monitor edge, so only a sliver of it covers the window
+  readonly property int fsTitleDrop: 14  // the title tab moves down this far so the equal top inset does not cut it off
   readonly property int gap: 26      // outer gap on the scratchpad so the frame sits in the gap
   readonly property int px: 3        // size of one "16-bit" pixel
   readonly property int duration: 300
@@ -533,6 +535,7 @@ Scope {
     function onRawEvent(event) {
       if (event.name === "configreloaded") { root.gapped = []; root.applyGaps(); return }
       if (event.name === "activewindowv2") { root.lastFocusMs = Date.now(); return }
+      if (event.name === "fullscreen" || event.name === "closewindow" || event.name === "movewindowv2") { root.checkFullscreen(); return }
       if (event.name === "openlayer" || event.name === "closelayer") {
         if (root.permanentLayers.indexOf(event.data) >= 0 || root.passiveLayers.indexOf(event.data) >= 0) return
         const next = Object.assign({}, root.flyouts)
@@ -558,6 +561,7 @@ Scope {
         return
       }
       root.setOpen(monitor, name)
+      root.checkFullscreen()
     }
   }
 
@@ -572,18 +576,28 @@ Scope {
       if (p.fit) for (const m of Object.keys(openOn)) if (openOn[m] === "special:" + p.name) return true
     return false
   }
+  // fsOn["special:<pad>|<monitor>"] is true while a window of that open pad is fullscreen: the frame then
+  // covers the whole monitor, above the window.
+  property var fsOn: ({})
+  function checkFullscreen() {
+    if (!boxProc.running) boxProc.running = true
+  }
   function applyBoxes(monitors, clients) {
     const next = {}
+    const nextFs = {}
     for (const m of monitors) {
       const ws = m.specialWorkspace ? m.specialWorkspace.name : ""
-      if (ws === "" || !pads.some(function(p) { return p.fit && "special:" + p.name === ws })) continue
-      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, n = 0
+      if (ws === "" || !isPadWorkspace(ws)) continue
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, n = 0, fs = false
       for (const c of clients) {
         if (!c.mapped || c.monitor !== m.id || !c.workspace || c.workspace.name !== ws) continue
+        if (c.fullscreen === 2) fs = true
         x0 = Math.min(x0, c.at[0]); y0 = Math.min(y0, c.at[1])
         x1 = Math.max(x1, c.at[0] + c.size[0]); y1 = Math.max(y1, c.at[1] + c.size[1])
         n++
       }
+      if (fs) nextFs[ws + "|" + m.name] = true
+      if (!pads.some(function(p) { return p.fit && "special:" + p.name === ws })) continue
       const res = m.reserved || [0, 0, 0, 0]
       next[ws + "|" + m.name] = n === 0 ? { empty: true }
         : { x: x0 - m.x - res[0], y: y0 - m.y - res[1], w: x1 - x0, h: y1 - y0 }
@@ -593,6 +607,7 @@ Scope {
     for (const k of Object.keys(next))
       if (JSON.stringify(merged[k]) !== JSON.stringify(next[k])) { merged[k] = next[k]; changed = true }
     if (changed) boxes = merged
+    if (JSON.stringify(nextFs) !== JSON.stringify(fsOn)) fsOn = nextFs
   }
   Process {
     id: boxProc
@@ -650,13 +665,18 @@ Scope {
       readonly property real slideY: fromY + (toY - fromY) * root.ease(prog, curveNow)
       readonly property real alphaNow: Math.max(0, Math.min(1, fromA + (toA - fromA) * root.ease(prog, curveNow)))
       readonly property var box: pad.fit ? (root.boxes[workspaceName + "|" + screen.name] || null) : null
-      readonly property bool fitted: box !== null && box.empty !== true
+      readonly property bool fullscreenNow: shown && root.fsOn[workspaceName + "|" + screen.name] === true
+      property bool keepOver: false          // stay above the window while the pad slides out
+      readonly property bool overWindow: fullscreenNow || keepOver
+      onFullscreenNowChanged: { if (fullscreenNow) keepOver = true; else if (shown) keepOver = false }
+      readonly property bool fitted: box !== null && box.empty !== true && !overWindow
       readonly property real minFrame: 120   // FramePainter.paint draws nothing below this
-      readonly property real frameW: fitted ? Math.round(Math.min(area.width, Math.max(minFrame, box.w + 2 * root.gap))) : area.width
-      readonly property real frameH: fitted ? Math.round(Math.min(area.height, Math.max(minFrame, box.h + 2 * root.gap))) : area.height
-      readonly property real frameX: fitted ? Math.round(Math.max(0, Math.min(area.width - frameW, box.x + box.w / 2 - frameW / 2))) : 0
+      readonly property real inset: overWindow ? root.fsInset : 0
+            readonly property real frameW: fitted ? Math.round(Math.min(area.width, Math.max(minFrame, box.w + 2 * root.gap))) : area.width + 2 * inset
+      readonly property real frameH: fitted ? Math.round(Math.min(area.height, Math.max(minFrame, box.h + 2 * root.gap))) : area.height + 2 * inset
+      readonly property real frameX: fitted ? Math.round(Math.max(0, Math.min(area.width - frameW, box.x + box.w / 2 - frameW / 2))) : -inset
       readonly property real bleed: fitted ? live.painter.bleedFor(style) : 0   // outer contour room on every side
-      readonly property real frameY: fitted ? Math.round(Math.max(0, Math.min(area.height - frameH, box.y + box.h / 2 - frameH / 2))) : 0
+      readonly property real frameY: fitted ? Math.round(Math.max(0, Math.min(area.height - frameH, box.y + box.h / 2 - frameH / 2))) : -inset
       onShownChanged: {
         slide.stop()
         const step = root.stepOf(shown ? pad.effect : pad.outEffect, shown ? pad.direction : pad.outDirection, screen.width, screen.height)
@@ -692,13 +712,14 @@ Scope {
         property: "prog"
         to: 1
         easing.type: Easing.Linear
-        onFinished: win.atRest = !win.shown
+        onFinished: { win.atRest = !win.shown; if (win.atRest) win.keepOver = false }
       }
 
       anchors { top: true; bottom: true; left: true; right: true }
-      exclusionMode: ExclusionMode.Normal
+      // A fullscreen window covers the Top layer and the bar's strip, so the frame goes above it and over the whole monitor, mostly past the edge.
+      exclusionMode: overWindow ? ExclusionMode.Ignore : ExclusionMode.Normal
       exclusiveZone: 0                      // stay below the bar
-      WlrLayershell.layer: WlrLayer.Top
+      WlrLayershell.layer: overWindow ? WlrLayer.Overlay : WlrLayer.Top
       WlrLayershell.namespace: "scratchpad-frame"
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       color: "transparent"
@@ -729,6 +750,7 @@ Scope {
           onWidthChanged: requestPaint()
           onHeightChanged: requestPaint()
           onImageLoaded: requestPaint()
+          Component.onCompleted: live.painter.preload(frame, Qt.resolvedUrl("assets/").toString(), live.assetRev)
           Connections {
             target: root
             function onColorsChanged() { frame.requestPaint() }
@@ -738,19 +760,20 @@ Scope {
           }
           Connections {
             target: live
-            function onVersionChanged() { frame.requestPaint() }
+            function onVersionChanged() { live.painter.preload(frame, Qt.resolvedUrl("assets/").toString(), live.assetRev); frame.requestPaint() }
           }
           Connections {
             target: win
             function onStyleChanged() { frame.requestPaint() }
             function onLabelChanged() { frame.requestPaint() }
+            function onOverWindowChanged() { frame.requestPaint() }
             function onLookChanged() { frame.requestPaint() }
           }
 
           onPaint: live.painter.paint(getContext("2d"), width, height, {
             style: win.style, text: root.flash || (root.showTitle ? win.label : ""),
             colors: win.look ? Object.assign({}, root.colors, win.look.colors) : root.colors,
-            px: root.px, font: root.fontFamily, follow: root.follow || (win.look !== null && Object.keys(win.look.colors).length > 0), bleed: win.bleed, assets: Qt.resolvedUrl("assets/").toString(), rev: live.assetRev,
+            titleDrop: win.overWindow ? root.fsTitleDrop : 0, px: root.px, font: root.fontFamily, follow: root.follow || (win.look !== null && Object.keys(win.look.colors).length > 0), bleed: win.bleed, assets: Qt.resolvedUrl("assets/").toString(), rev: live.assetRev,
             ornament: win.look && win.look.ornament ? win.look.ornament : "", ornaments: root.ornamentsUrl
           })
         }

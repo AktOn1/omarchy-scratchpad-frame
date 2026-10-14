@@ -238,6 +238,7 @@ function omarchy(ctx, W, H, o) {
   glowStroke(ctx, g, 2, 8, rgba(p.accent, 0.55))
   // label breaks the accent line
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 11, true)
     const t = o.text, sp = 3
     const tw = spacedWidth(ctx, t, sp), x0 = 34
@@ -246,6 +247,7 @@ function omarchy(ctx, W, H, o) {
     ctx.beginPath(); ctx.arc(x0 + 3, 11.5, 2.6, 0, Math.PI * 2); ctx.fillStyle = p.accent; ctx.fill()
     ctx.fillStyle = p.bright
     spaced(ctx, t, x0 + 13, 15.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
   // three small pager dots, bottom right
   for (let i = 0; i < 3; i++) {
@@ -322,6 +324,7 @@ function cyberpunk(ctx, W, H, o) {
 
   // label tab: yellow, slanted right edge, glitch ghost text
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 11, true)
     const t = o.text, sp = 2, tw = spacedWidth(ctx, t, sp), x0 = 46
     ctx.beginPath()
@@ -330,6 +333,7 @@ function cyberpunk(ctx, W, H, o) {
     ctx.fillStyle = rgba(mg, 0.9); spaced(ctx, t, x0 + 10 + 1.2, 15, sp, "left")
     ctx.fillStyle = rgba(cy, 0.9); spaced(ctx, t, x0 + 10 - 1.2, 15, sp, "left")
     ctx.fillStyle = dark; spaced(ctx, t, x0 + 10, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 
   // status text, bottom right
@@ -355,12 +359,14 @@ function aurora(ctx, W, H, o) {
   glowStroke(ctx, g2, 1, 4, rgba(p.cyan, 0.5))
   ctx.globalAlpha = 1
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0 = 40
     ctx.fillStyle = rgba(p.dark, 0.95)
     rrPath(ctx, x0 - 10, 3, tw + 20, 17, 8.5); ctx.fill()
     ctx.fillStyle = rgba(p.bright, 0.92)
     spaced(ctx, t, x0, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -413,10 +419,12 @@ function hud(ctx, W, H, o) {
   tri(W / 2, 4, 0, 1); tri(W / 2, H - 4, 0, -1); tri(4, H / 2, 1, 0); tri(W - 4, H / 2, -1, 0)
   // label + status
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 11, true)
     ctx.beginPath(); ctx.moveTo(60, 6); ctx.lineTo(60, 16); ctx.lineTo(67, 11); ctx.closePath(); ctx.fillStyle = line; ctx.fill()
     ctx.fillStyle = p.bright
     spaced(ctx, o.text, 74, 16, 2, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
   setFont(ctx, o, 9, true)
   ctx.fillStyle = rgba(line, 0.9)
@@ -442,6 +450,7 @@ function terminal(ctx, W, H, o) {
   ctx.lineWidth = 1; ctx.strokeStyle = dim; ctx.stroke()
   const x0 = 24
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 11, true)
     const t = "[ " + o.text + " ]"
     const tw = spacedWidth(ctx, t, 1)
@@ -449,6 +458,7 @@ function terminal(ctx, W, H, o) {
     ctx.fillStyle = ph; ctx.shadowColor = ph; ctx.shadowBlur = 6
     spaced(ctx, t, x0, 15, 1, "left")
     ctx.shadowBlur = 0; ctx.shadowColor = "rgba(0,0,0,0)"
+    ctx.translate(0, -(o.titleDrop || 0))
   }
   // prompt and block cursor, bottom
   setFont(ctx, o, 10, true)
@@ -480,11 +490,13 @@ function glass(ctx, W, H, o) {
   s.addColorStop(0, "rgba(255,255,255,0)"); s.addColorStop(0.5, "rgba(255,255,255,0.55)"); s.addColorStop(1, "rgba(255,255,255,0)")
   ctx.fillStyle = s; ctx.fillRect(W * 0.1, 2.5, W * 0.8, 1.2)
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     ctx.fillStyle = "rgba(255,255,255,0.88)"
     ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 3
     spaced(ctx, o.text, W / 2, 15, 4, "center")
     ctx.shadowBlur = 0; ctx.shadowColor = "rgba(0,0,0,0)"
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -828,6 +840,7 @@ function foliage(ctx, W, H, o) {
 
   // ---- plank sign hanging in the top-left, behind the front vines ----
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     const font = PIXFONT
     const text = o.text
     const tw = text.length * 4 - 1, plx = 44, plw = tw + 8
@@ -844,6 +857,7 @@ function foliage(ctx, W, H, o) {
         for (let c = 0; c < 3; c++)
           if (g[r * 3 + c] === "1") { dot(plx + 4 + i * 4 + c, 2 + r, K.wood[0]); dot(plx + 4 + i * 4 + c, 1 + r, K.wtext) }
     }
+    ctx.translate(0, -(o.titleDrop || 0))
   }
   flush()
 
@@ -1011,12 +1025,14 @@ function sacred(ctx, W, H, o) {
 
   // label
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 3.5, tw = spacedWidth(ctx, t, sp), x0 = 40
     pill(ctx, x0 - 4, 3, tw + 38, 17, K.dark, K.gold, 1)
     hexagram(ctx, x0 + 9, 11.5, 6, K.gold, 1)
     ctx.fillStyle = K.hi
     spaced(ctx, t, x0 + 22, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -1196,12 +1212,14 @@ function kawaii(ctx, W, H, o) {
 
   // label
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 2.5, tw = spacedWidth(ctx, t, sp), x0 = 40
     pill(ctx, x0 - 6, 3, tw + 34, 17, K.white, K.edge, 1.5)
     heartShape(ctx, x0 + 3, 11.5, 3.2, K.edge)
     ctx.fillStyle = K.ink
     spaced(ctx, t, x0 + 13, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -1371,11 +1389,13 @@ function celestial(ctx, W, H, o) {
   sparkleShape(ctx, W - 14, 10, 5, K.gold); sparkleShape(ctx, 14, H - 10, 5, K.gold)
 
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0 = 48
     ctx.fillStyle = rgba(K.dark, 0.9); rrPath(ctx, x0 - 8, 3, tw + 16, 17, 8.5); ctx.fill()
     ctx.fillStyle = K.moon
     spaced(ctx, t, x0, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -1518,11 +1538,13 @@ function vaporwave(ctx, W, H, o) {
   for (let i = 0; i < 4; i++) ctx.fillRect(sx - sr, sy + 1 + i * 2.6, 2 * sr, 0.6 + i * 0.35)
   ctx.restore()
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 11, true)
     const t = o.text, sp = 5, tw = spacedWidth(ctx, t, sp), x0 = sx + sr + 8
     ctx.fillStyle = rgba(K.dark, 0.92); rrPath(ctx, x0 - 8, 4, tw + 14, 15, 7.5); ctx.fill()
     ctx.fillStyle = K.pink; spaced(ctx, t, x0 + 1, 15.5, sp, "left")
     ctx.fillStyle = K.white; spaced(ctx, t, x0, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 
   // VHS readout, bottom right
@@ -1714,6 +1736,7 @@ function deepsea(ctx, W, H, o) {
   }
 
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 3.5, tw = spacedWidth(ctx, t, sp), x0 = 40
     pill(ctx, x0 - 4, 3, tw + 34, 17, rgba(K.deep, 0.95), K.wave, 1)
@@ -1721,6 +1744,7 @@ function deepsea(ctx, W, H, o) {
     dotShape(ctx, x0 + 5.8, 10.6, 1, K.bub)
     ctx.fillStyle = K.bub
     spaced(ctx, t, x0 + 18, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -1837,6 +1861,7 @@ function steampunk(ctx, W, H, o) {
   steam(ctx, W * 0.62 - 90, 30, 22, 0.28)
 
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 3.5, tw = spacedWidth(ctx, t, sp), x0 = 166
     ctx.fillStyle = K.brassLow; rrPath(ctx, x0 - 8, 2, tw + 28, 19, 3); ctx.fill()
@@ -1846,6 +1871,7 @@ function steampunk(ctx, W, H, o) {
     rivet(ctx, x0 - 2, 11.5, 1.8, K); rivet(ctx, x0 + tw + 14, 11.5, 1.8, K)
     ctx.fillStyle = K.iron
     spaced(ctx, t, x0 + 6, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -1996,12 +2022,14 @@ function halloween(ctx, W, H, o) {
   for (let i = 0; i < 9; i++) batShape(ctx, 420 + i * 120 + rb(0, 60), 52 + rb(0, 90) * rb(0, 1), rb(0.6, 1.1), i % 2 ? 1 : -0.4, mix(K.purple, K.ink, 0.3))
 
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 3.5, tw = spacedWidth(ctx, t, sp), x0 = 40
     pill(ctx, x0 - 4, 3, tw + 38, 17, K.night, K.orange, 1)
     batShape(ctx, x0 + 9, 11.5, 0.5, 1, K.orange)
     ctx.fillStyle = K.glow
     spaced(ctx, t, x0 + 22, 15, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -2224,6 +2252,7 @@ function pixel(ctx, width, height, o) {
 
   // name plate on the top edge, 3x5 pixel font
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     const font = PIXFONT
     const text = o.text
     const tw = text.length * 4 - 1
@@ -2240,6 +2269,7 @@ function pixel(ctx, width, height, o) {
         for (let c = 0; c < 3; c++)
           if (g[r * 3 + c] === "1") dot(plx + 3 + i * 4 + c, 1 + r, r === 0 ? st.text[0] : st.text[1])
     }
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -2486,12 +2516,14 @@ function megacity(ctx, W, H, o) {
   ;[[30, 40, 150, 30], [50, 62, 120, 55], [20, 88, 70, 80]].forEach((s) => neonLine(ctx, [[B + s[0], s[1] + B], [B + s[0] + s[2] - 20, s[3] + B]], K.cyan, 1.6, 0.85))
 
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0 = W * 0.4 - tw / 2
     ctx.fillStyle = K.ink; rrPath(ctx, x0 - 14, H - 21, tw + 28, 19, 3); ctx.fill()
     rrPath(ctx, x0 - 13, H - 20, tw + 26, 17, 3); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.pink, 0.9); ctx.stroke()
     ctx.fillStyle = rgba(K.pink, 0.3); spaced(ctx, t, x0 + 0.5, H - 7, sp, "left")
     ctx.fillStyle = mix(K.pink, "#ffffff", 0.6); spaced(ctx, t, x0, H - 7.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -2564,11 +2596,13 @@ function gilded(ctx, W, H, o) {
   vine(11, S * 0.55, 11, H - S * 0.55)
   vine(W - 11, S * 0.55, W - 11, H - S * 0.55)
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0 = W * 0.4 - tw / 2
     ctx.fillStyle = K.ink; rrPath(ctx, x0 - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
     rrPath(ctx, x0 - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.9); ctx.stroke()
     ctx.fillStyle = K.gold; spaced(ctx, t, x0, H - 7.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -2589,11 +2623,13 @@ function pasteup(ctx, W, H, o) {
   } else band(ctx, W, H, mix(K.ink, K.line, 0.15), 14, 6, false)
   if (props) ctx.drawImage(props, 0, 0, W, H)
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
     ctx.fillStyle = rgba(K.ink, 0.92); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 4); ctx.fill()
     rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 3); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.85); ctx.stroke()
     ctx.fillStyle = mix(K.line, "#ffffff", 0.6); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -2648,11 +2684,13 @@ function uiframe(ctx, W, H, o, spec) {
     }
   } else band(ctx, W, H, mix(spec.ink, trim, 0.2), 12, 6, false)
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
     ctx.fillStyle = rgba(spec.ink, 0.94); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 3); ctx.fill()
     rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 2); ctx.lineWidth = 1; ctx.strokeStyle = rgba(trim, 0.9); ctx.stroke()
     ctx.fillStyle = mix(trim, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 function runeforge(ctx, W, H, o) { uiframe(ctx, W, H, o, UIFRAME.RUNEFORGE) }
@@ -2756,6 +2794,7 @@ function blueprint(ctx, W, H, o) {
   cross(W / 2, 12); cross(W - 11, H / 2)
   // title block, top left
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 11, true)
     const t = o.text, sp = 2, tw = spacedWidth(ctx, t, sp), x0 = 34
     ctx.fillStyle = bg; ctx.fillRect(x0 - 6, 3, tw + 62, 17)
@@ -2763,6 +2802,7 @@ function blueprint(ctx, W, H, o) {
     ctx.beginPath(); ctx.moveTo(x0 + tw + 8.5, 3.5); ctx.lineTo(x0 + tw + 8.5, 19.5); ctx.stroke()
     ctx.fillStyle = ln; spaced(ctx, t, x0 + 1, 15.5, sp, "left")
     setFont(ctx, o, 8, false); ctx.fillText("REV A", x0 + tw + 13, 14.5)
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -2802,11 +2842,13 @@ function coralreef(ctx, W, H, o) {
     ctx.globalCompositeOperation = "source-over"
   }
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
     ctx.fillStyle = rgba(K.rail, 0.95); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
     rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.gold, 0.9); ctx.stroke()
     ctx.fillStyle = mix(K.glow, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 
@@ -2868,11 +2910,13 @@ function pieced(ctx, W, H, o, S) {
     ctx.globalCompositeOperation = "source-over"
   }
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
     ctx.fillStyle = rgba(K.rail, 0.95); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
     rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.9); ctx.stroke()
     ctx.fillStyle = mix(K.glow, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 function frost(ctx, W, H, o) { pieced(ctx, W, H, o, PIECED.FROST) }
@@ -2914,11 +2958,13 @@ function ownart(ctx, W, H, o) {
   for (let y = 120 + step / 2; y < H - 120; y += step) { dot(11, y); dot(W - 11, y) }
   ctx.globalCompositeOperation = "source-over"
   if (o.text) {
+    ctx.translate(0, o.titleDrop || 0)
     setFont(ctx, o, 10, true)
     const t = o.text, sp = 4, tw = spacedWidth(ctx, t, sp), x0t = W * 0.5 - tw / 2
     ctx.fillStyle = rgba(K.rail, 0.95); rrPath(ctx, x0t - 14, H - 21, tw + 28, 19, 9.5); ctx.fill()
     rrPath(ctx, x0t - 13, H - 20, tw + 26, 17, 8.5); ctx.lineWidth = 1; ctx.strokeStyle = rgba(K.line, 0.9); ctx.stroke()
     ctx.fillStyle = mix(K.glow, "#ffffff", 0.55); spaced(ctx, t, x0t, H - 7.5, sp, "left")
+    ctx.translate(0, -(o.titleDrop || 0))
   }
 }
 var HIDDEN = { OWNART: ownart }
@@ -2929,6 +2975,18 @@ var PAINTERS = { CORALREEF: coralreef,OMARCHY: omarchy, CYBERPUNK: cyberpunk, AU
   RUNEFORGE: runeforge, NEXUS: nexus, EMBERGOTH: embergoth, ABYSS: abyss, HANAMI: hanami, WILDWOOD: wildwood, DRIFTWOOD: driftwood, SLATE: slate, LEATHER: leather, TIDEPOOL: tidepool, CHERRYBARK: cherrybark, MOSSWOOD: mosswood, WALNUT: walnut, BAMBOO: bamboo, BIRCH: birch, LINEN: linen, TERRACOTTA: terracotta, BRICK: brick, SANDSTONE: sandstone, MARBLE: marble, CONCRETE: concrete, RUST: rust }
 for (const n in PAINTERS) SMOOTH.push(n)
 NAMES = SMOOTH.concat(PIXEL)
+
+// Starts loading every picture on this Canvas, so the first hover over a style already finds them (artUrl alone only asks for them while painting).
+function preload(cv, assets, rev) {
+  if (!cv || !cv.loadImage || !assets) return
+  const files = ["corner_a.png", "corner_b.png", "medallion.png", "pasteup_band.png", "pasteup_props.png", "coralreef_corners.png"]
+  for (const n in UIFRAME) if (UIFRAME[n].file.indexOf("try/") !== 0) files.push(UIFRAME[n].file)
+  for (const n in PIECED) files.push(PIECED[n].file)
+  for (const f of files) {
+    const u = assets + f + (rev ? "?r=" + rev : "")
+    if (!cv.isImageLoaded(u) && !cv.isImageLoading(u) && !cv.isImageError(u)) cv.loadImage(u)
+  }
+}
 
 function paint(ctx, W, H, o) {
   ctx.reset()
