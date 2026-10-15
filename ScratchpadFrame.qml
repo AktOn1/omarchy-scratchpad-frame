@@ -695,6 +695,7 @@ Scope {
         curveNow = step.curve
         atRest = false
         if (step.instant) {
+          toA = shown ? 1 : 0           // an instant exit has no slide to carry the frame away: hide it
           fromX = toX; fromY = toY; fromA = toA
           prog = 1
           atRest = !shown

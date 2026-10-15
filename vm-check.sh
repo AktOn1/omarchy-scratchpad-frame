@@ -151,6 +151,10 @@ if [ $E = scratchpad-frame ] && [ -f "$PLUGIN_DIR/tests/vm-check-fullscreen.sh" 
   bash "$PLUGIN_DIR/tests/vm-check-fullscreen.sh" && ok "fullscreen checks passed" || bad "fullscreen checks failed (see lines above)"
 fi
 
+if [ $E = scratchpad-frame ] && [ -f "$PLUGIN_DIR/tests/vm-check-instant.sh" ]; then
+  bash "$PLUGIN_DIR/tests/vm-check-instant.sh" && ok "instant-pad checks passed" || bad "instant-pad checks failed (see lines above)"
+fi
+
 if [ $E = scratchpad-frame ] && [ -f "$PLUGIN_DIR/tests/vm-check-monitors.sh" ]; then
   bash "$PLUGIN_DIR/tests/vm-check-monitors.sh" && ok "two-monitor checks passed" || bad "two-monitor checks failed (see lines above)"
 fi

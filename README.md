@@ -6,6 +6,10 @@ A frame around the Omarchy scratchpad (`SUPER + S`). The frame slides in and out
 
 ## What's new
 
+**1.8.2 (2026-10-15)**
+
+- **A scratchpad that goes out "instantly" no longer leaves its frame on the screen.** With the exit set to Instant (or the entrance set to Instant and no exit of its own) the frame stayed drawn on every monitor where the scratchpad had been open until the shell restarted. It now disappears together with the scratchpad.
+
 **1.8.1 (2026-10-15)**
 
 - **The text boxes no longer use Qt's built-in text input.** Qt's own text fields read the clipboard by themselves whenever another program changes it, before any length limit applies, even when paste is switched off. Every text box in the window (frame description, names, commands, AI and image-model settings) and the app search is now drawn by the plugin (`PlainField.qml`, `AktAppSearch.qml`) and never touches the clipboard on its own. Typing, selecting (shift+arrows, `Ctrl+A`, double click), word delete, Enter and Escape work as before. `Ctrl+V` and `Shift+Insert` paste again, but through a separate `wl-paste` process with a 2-second deadline and a hard size limit; middle click does not paste.
