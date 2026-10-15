@@ -11,11 +11,17 @@
 --               cfg.commands = { { key, command, label } ... }  (plain shell commands on a key)
 --               cfg.layouts = { { id, layout } ... }  (workspace layout per special workspace, "" = Hyprland's own)
 --               cfg.anim  = { specialWorkspaceIn = {enabled, speed, bezier, style}, specialWorkspaceOut = ... }
+--               cfg.mode  = "single" (default: opening a pad hides the open one) or "card" (opening a pad leaves the open ones; see Cards below)
 --               cfg.move  = windowsMove animation as configured {enabled, speed, bezier, style}; switched off while a pad opens on another monitor
 -- M.slide(direction, fn, motion): run fn with the special workspace animation set for that direction (motion = { outDirection, effect, outEffect } optional)
 -- M.launch(id, command): start a command on special:<id> without showing it
 -- M.close(address): close one window (a normal close request, the app may ask to save)
--- M.shutdown(): stop and also give back the layouts this module set
+-- M.shutdown(): stop and also give back the layouts this module set and send every card's windows home
+--
+-- Cards (cfg.mode = "card"): Hyprland shows one special workspace per monitor, so a second open pad borrows the open one.
+-- Its windows are moved (silently) onto the shown special workspace and go home when the card is closed or the stack ends.
+-- stack[monitor] = { host = <shown pad>, guests = { { id, addrs = {window addresses} } ... } }
+-- Every change is announced to the shell as the Hyprland custom event  akt-cards|<monitor>|<host>|<id>:<addr>,<addr>|<id>:...
 
 return function(global_name)
   local previous = rawget(_G, global_name)
@@ -35,6 +41,10 @@ return function(global_name)
   local restore_id = 0
   local effects = {}
   local motions = {}
+  local mode = "single"
+  local stack = (previous and previous.stack) or {}
+  M.stack = stack
+  local subs = {}
 
   local function set_leaf(leaf, spec, style)
     pcall(hl.animation, {
@@ -89,12 +99,11 @@ return function(global_name)
 
   -- The id of the pad that is open on the monitor in use, or nil.
   local function open_pad()
-    local ok, name = pcall(function()
+    local ok, special = pcall(function()
       local monitor = hl.get_active_monitor()
-      local special = monitor and (monitor.special_workspace or monitor.specialWorkspace)
-      return special and special.name
+      return monitor and (monitor.active_special_workspace or monitor.special_workspace or monitor.specialWorkspace)
     end)
-    if ok and type(name) == "string" and name:sub(1, 8) == "special:" then return name:sub(9) end
+    if ok and special and type(special.name) == "string" and special.name:sub(1, 8) == "special:" then return special.name:sub(9) end
     return nil
   end
 
@@ -164,7 +173,177 @@ return function(global_name)
     with_motion({ enter = { enter_effect, direction or "bottom" }, leave = leave }, fn, false)
   end
 
+
+  -- ---- cards ------------------------------------------------------------------
+
+  local function monitor_key(monitor)
+    return monitor and (monitor.name or tostring(monitor.id)) or nil
+  end
+
+  local function announce(key)
+    local st = stack[key]
+    local parts = { "akt-cards", key, st and st.host or "" }
+    if st then
+      for _, guest in ipairs(st.guests) do parts[#parts + 1] = guest.id .. ":" .. table.concat(guest.addrs, ",") end
+    end
+    pcall(hl.dispatch, hl.dsp.event(table.concat(parts, "|")))
+  end
+
+  local function window_at(address)
+    for _, window in ipairs(hl.get_windows()) do
+      if window.address == address then return window end
+    end
+    return nil
+  end
+
+  local function move_silent(window, workspace)
+    pcall(hl.dispatch, hl.dsp.window.move({ workspace = workspace, follow = false, window = window }))
+  end
+
+  -- Puts a card's windows back on its own pad (only those still on the workspace it borrowed).
+  local function send_home(guest, host)
+    for _, address in ipairs(guest.addrs) do
+      local window = window_at(address)
+      if window and window.workspace and window.workspace.name == "special:" .. host then
+        move_silent(window, "special:" .. guest.id)
+      end
+    end
+  end
+
+  local function dissolve(key)
+    local st = stack[key]
+    if not st then return end
+    stack[key] = nil
+    for _, guest in ipairs(st.guests) do send_home(guest, st.host) end
+    announce(key)
+  end
+
+  local function guest_index(st, id)
+    for i, guest in ipairs(st.guests) do
+      if guest.id == id then return i end
+    end
+    return nil
+  end
+
+  -- The pad shown on a monitor right now, or nil.
+  local function shown_on(monitor)
+    local ok, special = pcall(function()
+      return monitor and (monitor.active_special_workspace or monitor.special_workspace or monitor.specialWorkspace)
+    end)
+    if ok and special and type(special.name) == "string" and special.name:sub(1, 8) == "special:" then return special.name:sub(9) end
+    return nil
+  end
+
+  -- A stack whose host is no longer the pad shown on its monitor was ended from outside (another key, a workspace switch).
+  local function check_stacks()
+    for key, st in pairs(stack) do
+      local found = nil
+      for _, monitor in ipairs(hl.get_monitors and hl.get_monitors() or {}) do
+        if monitor_key(monitor) == key then found = monitor end
+      end
+      if not found or shown_on(found) ~= st.host then dissolve(key) end
+    end
+  end
+
+  -- A window that appears on (or is moved to) the home of a card joins the card on screen.
+  local function adopt(window)
+    if not window or not window.workspace then return end
+    local name = window.workspace.name
+    if type(name) ~= "string" or name:sub(1, 8) ~= "special:" then return end
+    local id = name:sub(9)
+    for key, st in pairs(stack) do
+      local at = guest_index(st, id)
+      if at then
+        local addrs = st.guests[at].addrs
+        addrs[#addrs + 1] = window.address
+        move_silent(window, "special:" .. st.host)
+        announce(key)
+        return
+      end
+    end
+  end
+
+  local function card_toggle(id, direction)
+    local mine = motion_of(id, direction)
+    local monitor = hl.get_active_monitor()
+    local key = monitor_key(monitor)
+    local open = open_pad()
+    -- a card that sits on another monitor goes home before this monitor uses the pad
+    for other, st in pairs(stack) do
+      local at = other ~= key and guest_index(st, id)
+      if at then
+        local gone = table.remove(st.guests, at)
+        send_home(gone, st.host)
+        if #st.guests == 0 then stack[other] = nil end
+        announce(other)
+      end
+    end
+    local st = key and stack[key] or nil
+    if st and st.host ~= open then dissolve(key); st = nil end
+
+    if not open then
+      with_motion({ enter = { mine.effect, mine.direction }, leave = { mine.outEffect, mine.outDirection } }, function()
+        hl.dispatch(hl.dsp.workspace.toggle_special(id))
+      end, pad_elsewhere(id))
+      return
+    end
+
+    if open ~= id then
+      if not st then
+        st = { host = open, guests = {} }
+        stack[key] = st
+      end
+      local at = guest_index(st, id)
+      if at then
+        local gone = table.remove(st.guests, at)
+        send_home(gone, open)
+        if #st.guests == 0 then stack[key] = nil end
+      else
+        local guest = { id = id, addrs = {} }
+        for _, window in ipairs(hl.get_windows()) do
+          if window.workspace and window.workspace.name == "special:" .. id then
+            guest.addrs[#guest.addrs + 1] = window.address
+            move_silent(window, "special:" .. open)
+            pcall(hl.dispatch, hl.dsp.window.bring_to_top({ window = window }))
+          end
+        end
+        st.guests[#st.guests + 1] = guest
+      end
+      announce(key)
+      return
+    end
+
+    -- the shown pad closes
+    if not st or #st.guests == 0 then
+      stack[key] = nil
+      local leaver = motion_of(open)
+      with_motion({ enter = { mine.effect, mine.direction }, leave = { leaver.outEffect, leaver.outDirection } }, function()
+        hl.dispatch(hl.dsp.workspace.toggle_special(id))
+      end, false)
+      announce(key)
+      return
+    end
+    -- other cards stay: the newest card becomes the shown pad and takes the rest of the stack along
+    local top = table.remove(st.guests)
+    send_home(top, open)
+    for _, guest in ipairs(st.guests) do
+      for _, address in ipairs(guest.addrs) do
+        local window = window_at(address)
+        if window and window.workspace and window.workspace.name == "special:" .. open then
+          move_silent(window, "special:" .. top.id)
+        end
+      end
+    end
+    st.host = top.id
+    if #st.guests == 0 then stack[key] = nil end
+    with_motion({ enter = { "instant", "bottom" }, leave = { "instant", "bottom" } }, function()
+      hl.dispatch(hl.dsp.workspace.toggle_special(top.id))
+    end, false)
+    announce(key)
+  end
+
   function M.toggle(id, direction)
+    if mode == "card" then return card_toggle(id, direction) end
     local mine = motion_of(id, direction)
     local open = open_pad()
     local leaver = mine
@@ -181,6 +360,21 @@ return function(global_name)
     move = cfg.move
     effects = cfg.effects or {}
     motions = cfg.motions or {}
+    mode = cfg.mode == "card" and "card" or "single"
+    if mode ~= "card" then
+      for key in pairs(stack) do dissolve(key) end
+    else
+      for _, event in ipairs({ "workspace.special_active", "workspace.active", "monitor.removed" }) do
+        local ok, sub = pcall(hl.on, event, function() check_stacks() end)
+        if ok and sub then subs[#subs + 1] = sub end
+      end
+      for _, event in ipairs({ "window.open", "window.move_to_workspace" }) do
+        local ok, sub = pcall(hl.on, event, function(window) adopt(window) end)
+        if ok and sub then subs[#subs + 1] = sub end
+      end
+      check_stacks()
+      for key in pairs(stack) do announce(key) end
+    end
     for effect, fx in pairs(effects) do
       local c = fx.curve
       if c and #c == 4 then
@@ -236,6 +430,7 @@ return function(global_name)
 
   function M.shutdown()
     M.stop()
+    for key in pairs(stack) do dissolve(key) end
     for id in pairs(layouts) do
       pcall(hl.workspace_rule, { workspace = "special:" .. id, layout = "" })
       layouts[id] = nil
@@ -257,6 +452,10 @@ return function(global_name)
     for _, bind in ipairs(binds) do
       pcall(function() bind:remove() end)
     end
+    for _, sub in ipairs(subs) do
+      pcall(function() sub:remove() end)
+    end
+    subs = {}
     for _, restore in ipairs(restores) do
       pcall(restore)
     end

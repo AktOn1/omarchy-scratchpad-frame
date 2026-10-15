@@ -104,7 +104,7 @@ function installCommand(id) {
 
 function builtinPad() {
   return { id: "scratchpad", label: "Scratchpad", builtin: true, key: DEFAULT_KEY, moveKey: DEFAULT_MOVE_KEY,
-           direction: "bottom", outDirection: "", effect: "", outEffect: "", style: "", keepMine: false, fit: false, layout: "", apps: [] }
+           direction: "bottom", outDirection: "", effect: "", outEffect: "", style: "", keepMine: false, fit: false, reload: false, layout: "", apps: [] }
 }
 
 function fullscreenLayer() {
@@ -112,7 +112,7 @@ function fullscreenLayer() {
 }
 
 function defaultState(scope) {
-  return scope === "layer" ? { version: 2, layer: fullscreenLayer() } : { version: 2, pads: [builtinPad()] }
+  return scope === "layer" ? { version: 2, layer: fullscreenLayer() } : { version: 2, mode: "single", pads: [builtinPad()] }
 }
 
 function cleanText(v, max) {
@@ -179,6 +179,7 @@ function cleanPad(p, taken) {
     style: cleanText(p.style, 40),
     keepMine: p.keepMine === true,
     fit: p.fit === true,
+    reload: p.reload === true,
     layout: cleanLayout(p.layout),
     apps: cleanApps(p.apps)
   }
@@ -200,6 +201,7 @@ function cleanState(scope, raw) {
   if (taken.indexOf("scratchpad") < 0) pads.unshift(builtinPad())
   else pads.sort(function (a, b) { return (b.builtin ? 1 : 0) - (a.builtin ? 1 : 0) })
   s.pads = pads
+  s.mode = raw.mode === "card" ? "card" : "single"
   return s
 }
 
@@ -400,7 +402,7 @@ function luaConfig(state, anim, detected, label, layerLayout) {
     var fx = EFFECTS[e]
     effects[fx.id] = { style: fx.style, speed: fx.speed, curve: fx.curve }
   }
-  return { label: label, pads: pads, commands: commands, anim: slide, move: (anim || {}).windowsMove, layouts: layouts, effects: effects, motions: motions }
+  return { label: label, mode: state.mode === "card" ? "card" : "single", pads: pads, commands: commands, anim: slide, move: (anim || {}).windowsMove, layouts: layouts, effects: effects, motions: motions }
 }
 
 function luaValue(v) {
@@ -488,7 +490,7 @@ function entryInfo(e) {
   return {
     id: String(e.id || ""), name: String(e.name || e.id || ""), generic: String(e.genericName || ""),
     comment: String(e.comment || ""), keywords: (e.keywords || []).map(String).join(" "),
-    terminal: e.runInTerminal === true, hidden: e.noDisplay === true,
+    terminal: e.runInTerminal === true, hidden: e.noDisplay === true, wm: String(e.startupClass || ""),
     command: (e.command || []).map(String)
   }
 }
@@ -528,6 +530,34 @@ function resolveApp(app, entries) {
     if (e.terminal && e.command.length === 1 && e.command[0].split("/").pop() === base) return "app:" + e.id
   }
   return app
+}
+
+// True when a window of this class (the app's window class, any case) is probably the given app's: the class equals or ends with one of
+// the app's names (desktop id, startup class, command), or contains it when the name is long enough to be unambiguous.
+function appOwnsClass(app, entries, cls) {
+  var c = String(cls || "").toLowerCase()
+  if (c === "") return false
+  var names = []
+  var id = appId(app)
+  if (id !== "") {
+    names.push(id.replace(/\.desktop$/, ""))
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].id !== id) continue
+      names.push(entries[i].wm)
+      if (entries[i].command.length > 0) names.push(entries[i].command[0].split("/").pop())
+    }
+  } else {
+    var words = String(app).trim().split(/\s+/)
+    if (words[0] === "uwsm-app" && words[1] === "--") words = words.slice(2)
+    if (words.length > 0) names.push(words[0].split("/").pop())
+  }
+  for (var n = 0; n < names.length; n++) {
+    var name = String(names[n] || "").toLowerCase()
+    if (name === "") continue
+    if (c === name || c.slice(-name.length - 1) === "." + name) return true
+    if (name.length >= 4 && c.indexOf(name) >= 0) return true
+  }
+  return false
 }
 
 function appTitle(app, entries) {

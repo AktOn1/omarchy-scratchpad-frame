@@ -298,6 +298,25 @@ Column {
           onClicked: root.source.run(["appsRestart", root.pad.id])
         }
       }
+      Row {
+        visible: root.ownsIdentity && !root.isLayer && root.pad.apps.length > 0
+        spacing: Style.space(8)
+        ToggleSwitch {
+          checked: root.pad.reload === true
+          foreground: root.source.foreground
+          onToggled: root.source.run(["padSet", root.pad.id, "reload", checked ? "off" : "on"])
+        }
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          width: root.colW - Style.space(60)
+          wrapMode: Text.WordWrap
+          textFormat: Text.PlainText
+          text: "Reload in the background: a listed app you close comes back at once, hidden on this scratchpad"
+          color: root.source.foreground
+          font.family: root.source.fontFamily
+          font.pixelSize: Style.font.bodySmall
+        }
+      }
       Repeater {
         model: root.ownsIdentity ? root.pad.apps : []
         delegate: Row {

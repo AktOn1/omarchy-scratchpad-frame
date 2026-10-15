@@ -17,6 +17,7 @@
 //      state (JSON of everything) | pads (JSON) | padsSet '{"pads": [...]}'
 // Scratchpad keys, directions and startup apps: AktEngine.qml (target scratchpad-frame.layers); the cards window: BarWidget.qml (target scratchpad-frame.panel).
 // Per-pad "fit" (AktEngine padSet <pad> fit on): the frame hugs the pad's windows instead of the whole screen.
+// Card mode (AktEngine mode card|single, akt.lua stacks): a pad opened while another is open joins it; akt.lua announces the stack as a custom event and the frames hug each card's windows.
 // More scratchpads: ~/.local/state/scratchpad-frame/pads.json lists extra special workspaces
 // (name, label, slide-in direction, optional own style, outDirection, effect, outEffect). Without the file only SUPER + S gets a frame.
 
@@ -421,6 +422,50 @@ Scope {
     if (name !== "") theme.reload()
   }
 
+  // Card mode (akt.lua): cards[monitor] = { host: <shown pad>, guests: [{ id, addrs }] }. The guests' windows sit on the host's
+  // special workspace; every card keeps its own frame, fitted around its own windows. instant[pad|monitor] = time: a pad that joins
+  // or leaves the stack with its windows moving at once takes its frame in and out at once too.
+  property var cards: ({})
+  property var instant: ({})
+  readonly property bool cardsActive: Object.keys(cards).length > 0
+
+  function cardPads(st) {
+    return st ? [st.host].concat(st.guests.map(g => g.id)) : []
+  }
+  function setCards(monitor, host, rest) {
+    let next = null
+    if (host !== "") {
+      const guests = []
+      for (const part of rest) {
+        const i = part.indexOf(":")
+        if (i <= 0) continue
+        const id = part.slice(0, i)
+        if (!/^[a-z0-9_-]{1,24}$/.test(id)) continue
+        guests.push({ id: id, addrs: part.slice(i + 1).split(",").filter(a => /^0x[0-9a-f]+$/.test(a)) })
+      }
+      if (guests.length > 0 && /^[a-z0-9_-]{1,24}$/.test(host)) next = { host: host, guests: guests }
+    }
+    const before = cardPads(cards[monitor] || null)
+    const after = cardPads(next)
+    const flags = Object.assign({}, instant)
+    const now = Date.now()
+    for (const id of before.concat(after))
+      if (before.indexOf(id) < 0 || after.indexOf(id) < 0) flags[id + "|" + monitor] = now
+    instant = flags
+    const all = Object.assign({}, cards)
+    if (next) all[monitor] = next; else delete all[monitor]
+    if (JSON.stringify(all) !== JSON.stringify(cards)) cards = all
+    checkFullscreen()
+  }
+  function takeInstant(id, monitor) {
+    const t = instant[id + "|" + monitor]
+    return t !== undefined && Date.now() - t < 600
+  }
+  // The card pads of a monitor, host first.
+  function inStack(id, monitor) {
+    return cardPads(cards[monitor] || null).indexOf(id) >= 0
+  }
+
   // ---- theme colours -----------------------------------------------------
   property var colors: ({})
   FileView {
@@ -535,6 +580,12 @@ Scope {
     function onRawEvent(event) {
       if (event.name === "configreloaded") { root.gapped = []; root.applyGaps(); return }
       if (event.name === "activewindowv2") { root.lastFocusMs = Date.now(); return }
+      if (event.name === "custom") {
+        if (event.data.indexOf("akt-cards|") !== 0) return
+        const parts = event.data.split("|")
+        if (parts.length >= 3) root.setCards(parts[1], parts[2], parts.slice(3))
+        return
+      }
       if (event.name === "fullscreen" || event.name === "closewindow" || event.name === "movewindowv2") { root.checkFullscreen(); return }
       if (event.name === "openlayer" || event.name === "closelayer") {
         if (root.permanentLayers.indexOf(event.data) >= 0 || root.passiveLayers.indexOf(event.data) >= 0) return
@@ -572,6 +623,7 @@ Scope {
   // {empty: true} when the pad has no windows (the frame stays full-size then).
   property var boxes: ({})
   readonly property bool fitActive: {
+    if (cardsActive) return true
     for (const p of pads)
       if (p.fit) for (const m of Object.keys(openOn)) if (openOn[m] === "special:" + p.name) return true
     return false
@@ -597,6 +649,28 @@ Scope {
         n++
       }
       if (fs) nextFs[ws + "|" + m.name] = true
+      const st = cards[m.name]
+      if (st && ws === "special:" + st.host) {
+        // card mode: each card is framed around its own windows (the host's are the ones no card claims)
+        const claimed = {}
+        for (const g of st.guests) for (const a of g.addrs) claimed[a] = g.id
+        const groups = {}
+        for (const id of cardPads(st)) groups[id] = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9, n: 0 }
+        for (const c of clients) {
+          if (!c.mapped || c.monitor !== m.id || !c.workspace || c.workspace.name !== ws) continue
+          const grp = groups[claimed[c.address] || st.host]
+          grp.x0 = Math.min(grp.x0, c.at[0]); grp.y0 = Math.min(grp.y0, c.at[1])
+          grp.x1 = Math.max(grp.x1, c.at[0] + c.size[0]); grp.y1 = Math.max(grp.y1, c.at[1] + c.size[1])
+          grp.n++
+        }
+        const rs = m.reserved || [0, 0, 0, 0]
+        for (const id of Object.keys(groups)) {
+          const grp = groups[id]
+          next["special:" + id + "|" + m.name] = grp.n === 0 ? { empty: true }
+            : { x: grp.x0 - m.x - rs[0], y: grp.y0 - m.y - rs[1], w: grp.x1 - grp.x0, h: grp.y1 - grp.y0 }
+        }
+        continue
+      }
       if (!pads.some(function(p) { return p.fit && "special:" + p.name === ws })) continue
       const res = m.reserved || [0, 0, 0, 0]
       next[ws + "|" + m.name] = n === 0 ? { empty: true }
@@ -649,7 +723,8 @@ Scope {
       readonly property var look: root.lookFor(pad)
       readonly property string style: look ? look.style : root.padStyle(pad)
       readonly property string label: pad.label
-      readonly property bool shown: root.openOn[screen.name] === workspaceName
+      readonly property bool stacked: root.inStack(pad.name, screen.name)
+      readonly property bool shown: stacked ? (root.openOn[screen.name] || "") !== "" : root.openOn[screen.name] === workspaceName
       // Hyprland slides a special workspace in from the right or the bottom, one whole monitor length away.
       property real fromX: screen.width
       property real fromY: 0
@@ -664,7 +739,8 @@ Scope {
       readonly property real slideX: fromX + (toX - fromX) * root.ease(prog, curveNow)
       readonly property real slideY: fromY + (toY - fromY) * root.ease(prog, curveNow)
       readonly property real alphaNow: Math.max(0, Math.min(1, fromA + (toA - fromA) * root.ease(prog, curveNow)))
-      readonly property var box: pad.fit ? (root.boxes[workspaceName + "|" + screen.name] || null) : null
+      readonly property bool fitNow: pad.fit || stacked
+      readonly property var box: fitNow ? (root.boxes[workspaceName + "|" + screen.name] || null) : null
       readonly property bool fullscreenNow: shown && root.fsOn[workspaceName + "|" + screen.name] === true
       property bool keepOver: false          // stay above the window while the pad slides out
       readonly property bool overWindow: fullscreenNow || keepOver
@@ -679,7 +755,8 @@ Scope {
       readonly property real frameY: fitted ? Math.round(Math.max(0, Math.min(area.height - frameH, box.y + box.h / 2 - frameH / 2))) : -inset
       onShownChanged: {
         slide.stop()
-        const step = root.stepOf(shown ? pad.effect : pad.outEffect, shown ? pad.direction : pad.outDirection, screen.width, screen.height)
+        const snap = root.takeInstant(pad.name, screen.name)
+        const step = root.stepOf(snap ? "instant" : (shown ? pad.effect : pad.outEffect), shown ? pad.direction : pad.outDirection, screen.width, screen.height)
         const wasAtRest = atRest
         fromX = slideX
         fromY = slideY
@@ -745,7 +822,7 @@ Scope {
           y: win.frameY - win.bleed + win.slideY
           opacity: win.alphaNow
           // A fitted pad waits for its first window measurement so the full frame never flashes.
-          visible: !win.pad.fit || win.box !== null
+          visible: !win.fitNow || win.box !== null
 
           renderStrategy: Canvas.Cooperative
           onWidthChanged: requestPaint()

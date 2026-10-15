@@ -4,10 +4,10 @@
 //
 // Each plugin creates one engine:  AktEngine { name: "scratchpad-frame"; label: "Scratchpad Frame"; scope: "pads" }
 // IPC (target "<name>.layers"): state | padAdd <label> [direction] | padRemove <id>
-//   padSet <id> <label|key|moveKey|direction|outDirection|effect|outEffect|style|keepMine|fit|layout> <value>
+//   padSet <id> <label|key|moveKey|direction|outDirection|effect|outEffect|style|keepMine|fit|reload|layout> <value>
 //     (the Fullscreen layer takes label, key, direction, outDirection, effect, outEffect, layout; outDirection and outEffect "same" = as coming in)
 //   appAdd <id> <command> | appRemove <id> <index> | appSearch <words> | appsStart <id> | appsRestart <id>
-//   magnet <id|none|off> | toggle <id> | refresh
+//   mode <single|card> (scratchpads: one open at a time, or cards that stay open together) | magnet <id|none|off> | toggle <id> | refresh
 
 import QtQuick
 import Quickshell
@@ -45,6 +45,8 @@ Scope {
   property var clients: []
   property var owned: ({})
   property var tracking: ({})
+  property var ownedClass: ({})     // window address -> its class, to tell which listed app a closed window was
+  property var reloads: ({})        // pad id -> times of its latest automatic reloads
   property var restarting: ({})
   property bool ownedLoaded: false
   property bool ownedMissing: false
@@ -236,6 +238,13 @@ Scope {
     const now = Date.now()
     const next = {}
     let changed = false
+    const gone = {}
+    const alive = {}
+    for (const c of clients) alive[c.address] = c.class || ""
+    for (const id in owned)
+      for (const a of owned[id])
+        if (alive[a] === undefined) (gone[id] = gone[id] || []).push(ownedClass[a] || "")
+    for (const a in alive) ownedClass[a] = alive[a]
     for (const layer of Model.layersOf(state)) {
       const here = onPad(layer.id).map(c => c.address)
       let mine = (owned[layer.id] || []).filter(a => here.indexOf(a) >= 0)
@@ -255,6 +264,7 @@ Scope {
       ownedFile.setText(JSON.stringify(next) + "\n")
       publish()
     }
+    for (const id in gone) if (restarting[id] === undefined) reloadClosed(id, gone[id])
     for (const id in restarting) {
       if ((owned[id] || []).length === 0 || now > restarting[id]) {
         delete restarting[id]
@@ -268,7 +278,40 @@ Scope {
     return (DesktopEntries.applications.values || []).map(Model.entryInfo)
   }
 
-  function launchApps(id) {
+  // Reload in the background (a pad's "reload" switch): a window of a listed app that was closed brings its app back, hidden on its pad.
+  // The app is told from the window's class; a pad with one app reloads it whatever the class. Three reloads in a minute
+  // stop it for that pad, so an app that quits at once does not start over and over.
+  function reloadClosed(id, classes) {
+    const layer = Model.findLayer(state, id)
+    if (!layer || !layer.reload || layer.apps.length === 0 || !appsAllowed) return
+    const entries = desktopEntries()
+    const live = owned[id] || []
+    const wanted = []
+    for (const cls of classes) {
+      let hit = -1
+      for (let i = 0; i < layer.apps.length && hit < 0; i++)
+        if (Model.appOwnsClass(Model.resolveApp(layer.apps[i], entries), entries, cls)) hit = i
+      if (hit < 0 && layer.apps.length === 1) hit = 0
+      if (hit < 0 || wanted.indexOf(hit) >= 0) continue
+      const app = Model.resolveApp(layer.apps[hit], entries)
+      if (layer.apps.length > 1 && live.some(a => Model.appOwnsClass(app, entries, ownedClass[a] || ""))) continue
+      if (layer.apps.length === 1 && live.length > 0) continue
+      wanted.push(hit)
+    }
+    if (wanted.length === 0) return
+    const now = Date.now()
+    const recent = (reloads[id] || []).filter(t => now - t < 60000)
+    if (recent.length >= 3) {
+      reloads[id] = recent
+      say(layer.label + ": its apps keep closing, so they are not reloaded again for a minute.")
+      return
+    }
+    recent.push(now)
+    reloads[id] = recent
+    launchApps(id, wanted)
+  }
+
+  function launchApps(id, only) {
     const layer = Model.findLayer(state, id)
     if (!layer || layer.apps.length === 0 || !appsAllowed) return
     const entries = desktopEntries()
@@ -276,8 +319,11 @@ Scope {
     launchChecks = Object.assign({}, launchChecks, { [id]: true })
     launchCheckTimer.restart()
     let code = ""
-    for (const app of layer.apps)
+    for (let i = 0; i < layer.apps.length; i++) {
+      if (only && only.indexOf(i) < 0) continue
+      const app = layer.apps[i]
       code += luaName + ".launch(" + Model.luaValue(id) + ", " + Model.luaValue(Model.startupCommand(Model.resolveApp(app, entries))) + "); "
+    }
     Quickshell.execDetached(["hyprctl", "eval", code])
     clientsDebounce.restart()
   }
@@ -504,8 +550,16 @@ Scope {
       if (field === "style") { pad.style = value === "default" || value === "none" ? "" : value; return "" }
       if (field === "keepMine") { pad.keepMine = value === "true" || value === "on" || value === "1"; return "" }
       if (field === "fit") { pad.fit = value === "true" || value === "on" || value === "1"; return "" }
-      return "unknown field '" + field + "' (label, key, moveKey, direction, outDirection, effect, outEffect, style, keepMine, fit, layout)"
+      if (field === "reload") { pad.reload = value === "true" || value === "on" || value === "1"; return "" }
+      return "unknown field '" + field + "' (label, key, moveKey, direction, outDirection, effect, outEffect, style, keepMine, fit, reload, layout)"
     })
+  }
+
+  function setMode(value) {
+    if (scope !== "pads") return "error: this plugin has no scratchpads"
+    const v = String(value).trim().toLowerCase()
+    if (v !== "single" && v !== "card") return "error: mode is single or card"
+    return mutate(d => { d.mode = v; return "" })
   }
 
   function appAdd(id, command) {
@@ -571,6 +625,7 @@ Scope {
     function padAdd(label: string, direction: string): string { return root.padAdd(label, direction) }
     function padRemove(id: string): string { return root.padRemove(id) }
     function padSet(id: string, field: string, value: string): string { return root.padSet(id, field, value) }
+    function mode(value: string): string { return root.setMode(value) }
     function appAdd(id: string, command: string): string { return root.appAdd(id, command) }
     function appRemove(id: string, index: string): string { return root.appRemove(id, index) }
     function appSearch(words: string): string { return JSON.stringify(Model.matchApps(root.desktopEntries(), words)) }

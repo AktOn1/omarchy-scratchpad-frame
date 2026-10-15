@@ -6,6 +6,12 @@ A frame around the Omarchy scratchpad (`SUPER + S`). The frame slides in and out
 
 ## What's new
 
+**1.9.0 (2026-10-15)**
+
+- **Card mode: scratchpads stay open side by side.** In the window, under "When a scratchpad opens", choose "Stack as cards" (or run `omarchy-shell scratchpad-frame.layers mode card`; back with `mode single`). One switch covers all scratchpads. In card mode, opening a second scratchpad while one is open no longer closes the first: the second one's windows join the open one and each card keeps its own frame. Pressing a card's key takes that card away again; if you close the one that was open first, the next card stays open. "The open one closes" (single mode) is still the default.
+- **Reload in the background, per scratchpad.** Switch on "Reload in the background" on a scratchpad's page (or `padSet <id> reload on`). As soon as a listed app's window is closed (by accident, or because a card was closed), the app starts again hidden on that scratchpad, as set up. If a scratchpad's apps close three times within a minute it stops reloading for a minute and says so.
+- **Fixed: the open scratchpad was not recognised on Hyprland 0.56.** The plugin looked for the open special workspace under a name that this version does not use, so the "leave" animation logic could not tell which scratchpad was open.
+
 **1.8.2 (2026-10-15)**
 
 - **A scratchpad that goes out "instantly" no longer leaves its frame on the screen.** With the exit set to Instant (or the entrance set to Instant and no exit of its own) the frame stayed drawn on every monitor where the scratchpad had been open until the shell restarted. It now disappears together with the scratchpad.
@@ -130,6 +136,15 @@ omarchy-shell scratchpad-frame.layers padSet notes fit on     # on | off, per sc
 ```
 
 The frame then hugs the box around all windows on that scratchpad (plus the 26 px gap the frame sits in) and follows them while you move or resize a floating window; Hyprland sends no event for that, so the windows are checked every 150 ms, and only while a fitted scratchpad is open. Tiled scratchpads fill the screen, so they look the same as before. An empty scratchpad keeps the full frame, and a very small window gets a frame of at least 120 px. Every style works, since each is painted for whatever size it is given; the styles with decorations drawn over the window area (Foliage, Sacred, Kawaii and friends) cover proportionally more of a small window.
+
+### Card mode and reload
+
+```bash
+omarchy-shell scratchpad-frame.layers mode card               # card | single (default), for all scratchpads
+omarchy-shell scratchpad-frame.layers padSet notes reload on  # on | off, per scratchpad
+```
+
+Hyprland shows one special workspace per monitor, so a card is not a second workspace: the shown scratchpad hosts the others, and the plugin moves a card's windows onto it silently (and back to their own scratchpad when the card closes). Windows are tiled by the host scratchpad's layout and each frame hugs its own card's windows. A window you open while cards are stacked lands on the host scratchpad. Reload only restarts apps listed on the scratchpad (matched by window class), never other windows.
 
 ### Styles that use pictures (assets)
 

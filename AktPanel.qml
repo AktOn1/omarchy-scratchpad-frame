@@ -373,6 +373,31 @@ Item {
                   fontFamily: root.fontFamily
                   onAccepted: { if (text.trim() !== "") section.src.run(["padAdd", text.trim(), "bottom"]); text = "" }
                 }
+
+                Column {
+                  visible: section.src.scope === "pads" && section.src.up
+                  width: parent.width
+                  spacing: Style.space(6)
+                  Dropdown {
+                    width: Style.space(260)
+                    label: "When a scratchpad opens"
+                    fontFamily: root.fontFamily
+                    options: [{ value: "single", label: "The open one closes" }, { value: "card", label: "Stack as cards" }]
+                    value: section.src.snap.state.mode === "card" ? "card" : "single"
+                    onChanged: function(v) { section.src.run(["mode", v]) }
+                  }
+                  Text {
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    text: section.src.snap.state.mode === "card"
+                      ? "Opening a scratchpad leaves the open ones where they are, each with its own frame. Its key closes just that one."
+                      : "Opening a scratchpad closes the one that is open (how Hyprland shows them)."
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    wrapMode: Text.WordWrap
+                  }
+                }
               }
             }
           }

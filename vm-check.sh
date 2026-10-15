@@ -155,6 +155,10 @@ if [ $E = scratchpad-frame ] && [ -f "$PLUGIN_DIR/tests/vm-check-instant.sh" ]; 
   bash "$PLUGIN_DIR/tests/vm-check-instant.sh" && ok "instant-pad checks passed" || bad "instant-pad checks failed (see lines above)"
 fi
 
+if [ $E = scratchpad-frame ] && [ -f "$PLUGIN_DIR/tests/vm-check-cards.sh" ]; then
+  bash "$PLUGIN_DIR/tests/vm-check-cards.sh" && ok "card-mode and reload checks passed" || bad "card-mode and reload checks failed (see lines above)"
+fi
+
 if [ $E = scratchpad-frame ] && [ -f "$PLUGIN_DIR/tests/vm-check-monitors.sh" ]; then
   bash "$PLUGIN_DIR/tests/vm-check-monitors.sh" && ok "two-monitor checks passed" || bad "two-monitor checks failed (see lines above)"
 fi
