@@ -6,6 +6,11 @@ A frame around the Omarchy scratchpad (`SUPER + S`). The frame slides in and out
 
 ## What's new
 
+**1.8.1 (2026-10-15)**
+
+- **The text boxes no longer use Qt's built-in text input.** Qt's own text fields read the clipboard by themselves whenever another program changes it, before any length limit applies, even when paste is switched off. Every text box in the window (frame description, names, commands, AI and image-model settings) and the app search is now drawn by the plugin (`PlainField.qml`, `AktAppSearch.qml`) and never touches the clipboard on its own. Typing, selecting (shift+arrows, `Ctrl+A`, double click), word delete, Enter and Escape work as before. `Ctrl+V` and `Shift+Insert` paste again, but through a separate `wl-paste` process with a 2-second deadline and a hard size limit; middle click does not paste.
+- **App search shows its matches under the box.** "Search installed apps to add..." lists the matches right below it (up/down and Enter, or click) instead of opening a popup.
+
 **1.8.0 (2026-10-15)**
 
 - **Safer text boxes.** The text boxes in the window (frame description, names, commands, AI and image-model settings) now exist only while the window is open and you can see them, and they never read the clipboard, so another program that fills the clipboard with something huge cannot freeze your desktop. The price: pasting into these boxes (Ctrl+V, Shift+Insert, middle click) is switched off; type the value instead.
@@ -225,7 +230,7 @@ For a keybind: `omarchy-shell scratchpad-frame.bar toggle` (also `open` and `clo
 
 ## Describe a frame (your own AI)
 
-The text boxes in this window do not accept paste (Ctrl+V, Shift+Insert, middle click are ignored) and exist only while the window is open: type the description, address or command. That keeps the shell from ever reading your clipboard on behalf of a text box.
+The text boxes in this window are drawn by the plugin, not by Qt's built-in text input, so they never read your clipboard on their own. Ctrl+V and Shift+Insert paste through a separate `wl-paste` process (2-second deadline, size limit); middle click does not paste.
 
 Open the picker for a scratchpad (bar icon, click the scratchpad). At the top is a box, **Describe the frame you want**. Type a few words and press Enter or **Make frame**. An empty box does nothing, and nothing is sent until you press the button.
 
@@ -257,7 +262,7 @@ From a terminal: `bin/frame-ai image providers`, `bin/frame-ai image use comfyui
 ## What it touches
 
 - Draws one click-through, transparent layer-shell window per monitor. While a window on a scratchpad is fullscreen, that window moves to the overlay layer so the frame shows above it.
-- Never reads the clipboard: the window's text boxes are created only while it is open and ignore paste.
+- Reads the clipboard only when you press Ctrl+V or Shift+Insert in one of its text boxes: it runs `wl-paste` in a separate process (2-second deadline, at most 64 KiB). The text boxes are drawn by the plugin; no Qt text input sits in the shell.
 - Reads `~/.local/state/omarchy/current/theme/colors.toml` (read only) for the theme-following styles.
 - Runs `hyprctl eval` to widen `gaps_out` on `special:scratchpad` to 26 px so the frame sits in the gap, re-applies it when Hyprland reloads its config, and sets it back to your global `general:gaps_out` when the plugin is disabled or removed. It never edits your Hyprland config files.
 - The bar widget runs `omarchy-shell scratchpad-frame ...` commands only; it reads the same style state file and `colors.toml`, and writes nothing of its own.

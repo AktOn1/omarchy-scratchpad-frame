@@ -45,7 +45,7 @@ Column {
     spacing: Style.space(8)
     width: parent.width
 
-    GuardedField {
+    PlainField {
       id: nameField
       visible: root.ownsIdentity
       width: parent.width - showButton.width - (removeButton.visible ? removeButton.width : 0) - parent.spacing * (removeButton.visible ? 2 : 1)
@@ -325,21 +325,17 @@ Column {
           }
         }
       }
-      SearchableDropdown {
+      AktAppSearch {
         visible: root.ownsIdentity
-        id: appPicker
         width: parent.width
-        showLabel: false
         foreground: root.source.foreground
         fontFamily: root.source.fontFamily
         options: root.source.appChoices
         placeholderText: "Search installed apps to add..."
-        triggerLabel: "Search installed apps to add..."
         emptyText: "No installed app matches"
-        value: ""
-        onChanged: function(v) { root.source.run(["appAdd", root.pad.id, v]); value = "" }
+        onChosen: function(v) { root.source.run(["appAdd", root.pad.id, v]) }
       }
-      GuardedField {
+      PlainField {
         visible: root.ownsIdentity
         width: parent.width
         maximumLength: 300

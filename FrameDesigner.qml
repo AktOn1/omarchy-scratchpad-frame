@@ -95,8 +95,8 @@ Column {
     }
   }
 
-  // Text boxes exist only while the panel is open and they are on screen, and never read the clipboard (see GuardedField.qml).
-  component Field: GuardedField {
+  // Text boxes are drawn by the plugin and never read the clipboard on their own (see PlainField.qml).
+  component Field: PlainField {
     width: fm.width
     height: Style.space(32)
     verticalPadding: Style.space(3)

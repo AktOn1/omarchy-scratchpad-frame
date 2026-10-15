@@ -364,7 +364,7 @@ Item {
                   }
                 }
 
-                GuardedField {
+                PlainField {
                   visible: section.src.scope === "pads" && section.src.up
                   width: parent.width
                   maximumLength: 40
